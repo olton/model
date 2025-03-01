@@ -12,8 +12,12 @@ const DevToolsWindowStyle = `
             z-index: 9999;
             font-family: monospace;
             
-            .devtools-section:not(:last-child) {
-                border-bottom: 1px solid #333;
+            .devtools-section {
+                padding: 8px;
+                margin: 4px;
+                border: 1px solid #444;
+                cursor: pointer;
+                hover: background-color: #333;
             }
             
             h3 {
@@ -37,7 +41,7 @@ const DevToolsWindowStyle = `
         #model-devtools-time-travel-dialog {
             position: fixed;
             bottom: 0;
-            right: 300px;
+            right: 304px;
             background: #2a2a2a;
             border: 1px solid #444;
             border-radius: 4px;
@@ -48,7 +52,8 @@ const DevToolsWindowStyle = `
             font-family: monospace;
             
             .time-travel-items {
-                padding: 8px; height: calc(100% - 35px); 
+                padding: 4px; 
+                height: calc(100% - 35px); 
                 overflow: auto;
                 position: relative;
             }
@@ -139,7 +144,7 @@ class ModelDevTools {
         header.innerHTML = `
             ${DevToolsWindowStyle}
             <div class="dev-tools-header">
-                <span>Model DevTools</span>
+                <span>🛠 Model DevTools</span>
                 <div>
                     <button id="devtools-time-travel" title="Time Travel">⏱</button>
                     <button id="devtools-close" title="Close">×</button>
@@ -176,15 +181,12 @@ class ModelDevTools {
         }
 
         // Формуємо список станів
-        const statesList = this.history.map((snapshot, index) => `
+        const statesList = this.history.reverse().map((snapshot, index) => `
             <div class="time-travel-item">
                 <div>Time: ${new Date(snapshot.timestamp).toLocaleTimeString()}</div>
                 <div>Type: ${snapshot.type}</div>
                 <div>Property: ${snapshot.property || snapshot.event || snapshot.path || ''}</div>
-                <div>Value: ${snapshot.oldValue + " -> " + snapshot.newValue}</div>
-                <button data-time-travel-index="${index}">
-                    Go to this state
-                </button>
+                <div>Value: ${snapshot.type === "computed-update" ? snapshot.newValue : snapshot.oldValue + " -> " + snapshot.newValue}</div>
             </div>
         `).join('');
 
@@ -193,17 +195,10 @@ class ModelDevTools {
                 <span>Time Travel</span>
                 <button style="margin-left: auto" onclick="this.parentElement.parentElement.remove()">×</button>
             </div>
-            <div class="time-travel-items">${statesList || '<div style="height: 100%; display: flex; align-items: center; justify-content: center;">Nothing to show!</div>'}</div>
+            <div class="time-travel-items">${statesList || 'Nothing to show!'}</div>
         `;
 
         document.body.appendChild(dialog);
-        
-        dialog.querySelectorAll('[data-time-travel-index]').forEach(button => {
-            button.onclick = () => {
-                const index = button.getAttribute('data-time-travel-index');
-                this.timeTravel(index);
-            }
-        })
         
         if (!statesList) {
             setTimeout(() => {
@@ -215,7 +210,8 @@ class ModelDevTools {
     createToggleButton() {
         const button = document.createElement('button');
         button.id = "model-dev-tools-toggle-button";
-        button.textContent = 'Model DevTools';
+        button.textContent = '🛠';
+        button.title = 'Model DevTools';
         button.onclick = () => this.togglePanel();
         document.body.appendChild(button);
     }
@@ -234,7 +230,7 @@ class ModelDevTools {
 
         // Відстеження подій
         this.model.on('*', (eventName, data) => {
-            if (eventName !== 'change') {
+            if (eventName !== 'change' && eventName !== 'compute') {
                 this.logChange({
                     type: 'event',
                     event: eventName,
@@ -245,11 +241,11 @@ class ModelDevTools {
         });
 
         // Відстеження обчислюваних властивостей
-        this.model.on('computedUpdated', ({ key, value }) => {
+        this.model.on('compute', ({ key, value }) => {
             this.logChange({
                 type: 'computed-update',
                 property: key,
-                value,
+                newValue: value,
                 timestamp: Date.now()
             });
         });

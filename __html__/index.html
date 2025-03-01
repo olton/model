@@ -7,37 +7,31 @@
 <body>
 <div id="root">
 <h1>Counter</h1>
-    <div data-for="item in items">
-        Item: {{ item }}
-    </div>
+<!--    <div data-for="item in items">-->
+<!--        Item: {{ item }}-->
+<!--    </div>-->
 
-    <div>
-        <p>Ім'я: {{ user.name }}
-        <p>Місто: {{ user.address.city }}
-        <p>Повна адреса: {{ fullAddress }}
-    </div>
+<!--    <div>-->
+<!--        <p>Ім'я: {{ user.name }}-->
+<!--        <p>Місто: {{ user.address.city }}-->
+<!--        <p>Повна адреса: {{ fullAddress }}-->
+<!--    </div>-->
 
-    <div>
-        <input type="text" data-model="user.name">
-    </div>
+<!--    <div>-->
+<!--        <input type="text" data-model="user.name">-->
+<!--    </div>-->
 
-    <ul>
-        <li data-for="item in user.items">{{ item }}</li>
-    </ul>
-    
+<!--    <ul>-->
+<!--        <li data-for="item in user.items">{{ item }}</li>-->
+<!--    </ul>-->
+<!--    -->
     <div>Counter: {{ counter }}</div>
     <div><input class="text-center" type="text" data-model="counter"></div>
     <div>Статус: {{ status }}</div>
-    <!-- Додаємо нові блоки з m-if -->
-    <div data-if="counter > 0">
-        Лічильник більший за нуль
-    </div>
-    <div data-if="counter < 0">
-        Лічильник менший за нуль
-    </div>
-    <div data-if="counter === 0">
-        Лічильник дорівнює нулю
-    </div>
+
+    <div data-if="counter > 0">Лічильник більший за нуль</div>
+    <div data-if="counter < 0">Лічильник менший за нуль</div>
+    <div data-if="counter === 0">Лічильник дорівнює нулю</div>
 
     <div class="m-2 d-flex flex-row gap-2">
         <button onclick="updateCounter('+')">+</button>
@@ -46,89 +40,6 @@
     </div>
     
 </div>
-<script type="module">
-    import Model from "../dist/model.js";
-    // Model.DEBUG = true;
-    Model.info()
-    const app = new Model({
-        items: ['Перший', 'Другий', 'Третій'],
-        counter: 10,
-        status: function () {
-            return this.counter === 0 ? "Zero" : this.counter > 0 ? "Positive" : "Negative";
-        },
-        user: {
-            name: 'Іван',
-            address: {
-                city: 'Київ',
-                street: 'Хрещатик'
-            },
-            items: ['Перший', 'Другий', 'Третій'],
-        },
-        // Computed властивість, що використовує вкладені дані
-        fullAddress() {
-            return `${this.user.address.city}, ${this.user.address.street}`;
-        },
-    })
-
-    app.init("#root")
-
-    globalThis.updateCounter = (operator) => {
-        operator === "-" ? app.data.counter-- : app.data.counter++
-    }
-
-    globalThis.updateArray = () => {
-        app.data.items.push('Новий елемент');
-    }
-    
-    // Підписка на події
-    // app.on('change', ({ property, oldValue, newValue }) => {
-    //     console.log(`Змінено ${property}: ${oldValue} -> ${newValue}`);
-    // });
-
-    // Додавання middleware
-    // app.middleware.use(async (context, next) => {
-    //     // Валідація
-    //     if (context.property === 'counter' && context.newValue < 0) {
-    //         context.preventDefault = true;
-    //         return;
-    //     }
-    //     await next();
-    // });
-
-    // Валідація
-    // app.addValidator('username', value => value.length >= 3);
-
-    // Форматування
-    // app.addFormatter('username', value => value.trim());
-
-    // Спостерігач
-    // app.watch('counter', (newValue, oldValue) => {
-    //     console.log(`Counter змінився з ${oldValue} на ${newValue}`);
-    // });
-
-    // Групове оновлення
-    // app.batch(() => {
-    //     app.data.counter = 10;
-    //     app.data.username = 'John';
-    // });
-
-    // Збереження стану
-    // window.addEventListener('beforeunload', () => {
-    //     app.saveState();
-    // });
-
-    // Відновлення стану при завантаженні
-    // document.addEventListener('DOMContentLoaded', () => {
-    //     app.loadState();
-    //     app.init();
-    // });
-
-    const devTools = app.initDevTools({
-        enabled: true,
-        timeTravel: true,
-        maxSnapshots: 50
-    });
-
-</script>
+<script type="module" src="./index.js"></script>
 </body>
 </html>

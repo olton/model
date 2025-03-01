@@ -27,7 +27,8 @@
     "dev": "npm run clean && cross-env NODE_NO_WARNINGS=1 MODE=development node build.js",
     "pub": "npm publish --access public",
     "test": "easytest --include='__tests__/*.test.js'",
-    "check": "npx biome check"
+    "check": "npx biome check",
+    "start": "vite"
   },
   "pre-commit": [],
   "browserslist": [
@@ -40,6 +41,7 @@
     "cross-env": "^7.0.3",
     "esbuild": "^0.25.0",
     "esbuild-plugin-replace": "^1.4.0",
-    "shx": "^0.3.4"
+    "shx": "^0.3.4",
+    "vite": "^6.2.0"
   }
 }
