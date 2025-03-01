@@ -1,7 +1,7 @@
 
 /*!
- * Model v0.1.0
- * Build: 01.03.2025, 09:12:36
+ * Model v0.2.0
+ * Build: 01.03.2025, 09:30:50
  * Copyright 2012-2025 by Serhii Pimenov
  * Licensed under MIT
  */
@@ -191,10 +191,7 @@
   var model_default = Model;
 
   // src/index.js
-  var version = "___VERSION___";
-  var build_time = "___BUILD_TIME___";
   model_default.info = () => {
-    console.info(`%c Dom %c v${version} %c ${build_time} `, "color: white; font-weight: bold; background: #0080fe", "color: white; background: darkgreen", "color: white; background: #0080fe;");
   };
   var index_default = model_default;
 })();

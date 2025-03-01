@@ -1,7 +1,7 @@
 {
   "author": "Serhii Pimenov <serhii@pimenov.com.ua>",
   "name": "@olton/model",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Reactive model for two-way data binding",
   "keywords": [
     "javascript",
@@ -19,7 +19,7 @@
     "url": "https://github.com/olton/model.git"
   },
   "license": "MIT",
-  "main": "dist/mode.js",
+  "main": "dist/model.js",
   "type": "module",
   "scripts": {
     "clean": "shx rm -rf lib/*",
