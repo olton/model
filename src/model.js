@@ -1,19 +1,23 @@
+import EventEmitter from './event-emmiter.js';
+import MiddlewareManager from "./middleware.js";
+
 const ModelOptions = {
     id: "model",
 }
 
-class Model {
+class Model extends EventEmitter {
     static DEBUG = false
     static log = (...args) => {
         if (Model.DEBUG) {
             console.log(...args);
         }
     }
-
-
+    
     constructor(data = {}, options = {}) {
         Model.log('Ініціалізація Model з даними:', data);
 
+        super();
+        
         this.options = Object.assign({}, ModelOptions, options);
         this.elements = [];
         this.inputs = [];
@@ -21,7 +25,8 @@ class Model {
         this.watchers = new Map(); // Додаємо спостерігачів
         this.batchUpdate = false;
         this.loops = new Map();
-
+        this.events = new Map();
+        this.middleware = new MiddlewareManager();
 
         // Регистрируем вычисляемые свойства
         for (const key in data) {
@@ -38,6 +43,7 @@ class Model {
         this.data = this.createReactiveProxy(data);
     }
 
+    // Парсимо DOM для пошуку циклів
     parseLoops(rootElement) {
         Model.log('Шукаємо елементи з m-for');
         const loopElements = rootElement.querySelectorAll('[m-for]');
@@ -80,6 +86,7 @@ class Model {
         });
     }
 
+    // Оновлюємо цикл
     updateLoop(element) {
         const loopInfo = this.loops.get(element);
         if (!loopInfo) {
@@ -122,6 +129,7 @@ class Model {
 
     }
 
+    // Обробка шаблонних вузлів
     processTemplateNode(node, context) {
         if (node.nodeType === Node.TEXT_NODE) {
             const originalText = node.textContent;
@@ -142,24 +150,7 @@ class Model {
         }
     }
 
-    // bindLoopEvents(node, item, index) {
-    //     const clickHandler = node.getAttribute('m-on:click');
-    //     if (clickHandler) {
-    //         node.addEventListener('click', (event) => {
-    //             // Створюємо контекст для обробника
-    //             const context = {
-    //                 item,
-    //                 index,
-    //                 event,
-    //                 target: event.target
-    //             };
-    //
-    //             // Виконуємо обробник у контексті моделі
-    //             this.executeHandler(clickHandler, context);
-    //         });
-    //     }
-    // }
-
+    // Пакетне оновлення
     batch(callback) {
         this.batchUpdate = true;
         callback();
@@ -229,7 +220,7 @@ class Model {
         }
 
         return new Proxy(obj, {
-            set: (target, property, value) => {
+            set: async (target, property, value) => {
                 if (typeof property === 'symbol') {
                     target[property] = value;
                     return true;
@@ -255,7 +246,28 @@ class Model {
                 }
 
                 const oldValue = target[property];
-                target[property] = value;
+                // Створюємо контекст для middleware
+                const context = {
+                    property,
+                    oldValue,
+                    newValue: value,
+                    preventDefault: false
+                };
+
+                // Обробляємо через middleware
+                await this.middleware.process(context);
+
+                if (context.preventDefault) {
+                    return true;
+                }
+
+                target[property] = context.newValue;
+
+                this.emit('change', {
+                    property,
+                    oldValue,
+                    newValue: context.newValue
+                });
 
                 const fullPath = path ? `${path}.${property}` : property;
 
