@@ -11,6 +11,14 @@ const DevToolsWindowStyle = `
             border: 1px solid #333;
             z-index: 9999;
             font-family: monospace;
+            
+            .devtools-section:not(:last-child) {
+                border-bottom: 1px solid #333;
+            }
+            
+            h3 {
+                margin: 0;
+            }
         }
         
         #model-dev-tools-toggle-button {
@@ -28,25 +36,34 @@ const DevToolsWindowStyle = `
 
         #model-devtools-time-travel-dialog {
             position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+            bottom: 0;
+            right: 300px;
             background: #2a2a2a;
-            padding: 10px;
             border: 1px solid #444;
             border-radius: 4px;
-            max-height: 80vh;
-            overflow-y: auto;
+            height: 400px;
+            width: 300px;
             z-index: 10000;
             color: #fff;
             font-family: monospace;
             
+            .time-travel-items {
+                padding: 8px; height: calc(100% - 35px); 
+                overflow: auto;
+                position: relative;
+            }
+            
             .time-travel-item {
                 padding: 8px;
-                margin: 4px 0;
+                margin: 4px;
                 border: 1px solid #444;
                 cursor: pointer;
                 hover: background-color: #333;
+                
+                button {
+                    margin-top: 8px;
+                    background: dodgerblue;
+                }
             }
         }
         
@@ -75,6 +92,13 @@ const DevToolsWindowStyle = `
                     }
                 }
             }        
+        }
+        
+        .dev-tools-header {
+            padding: 8px; 
+            border-bottom: 1px solid #333; 
+            display: flex; 
+            justify-content: space-between;
         }
     </style>
 `
@@ -114,7 +138,7 @@ class ModelDevTools {
         const header = document.createElement('div');
         header.innerHTML = `
             ${DevToolsWindowStyle}
-            <div style="padding: 8px; border-bottom: 1px solid #333; display: flex; justify-content: space-between;">
+            <div class="dev-tools-header">
                 <span>Model DevTools</span>
                 <div>
                     <button id="devtools-time-travel" title="Time Travel">⏱</button>
@@ -145,8 +169,11 @@ class ModelDevTools {
 
     showTimeTravelDialog() {
         // Створюємо діалог для time travel
-        const dialog = document.createElement('div');
-        dialog.id = "model-devtools-time-travel-dialog";
+        let dialog = document.getElementById('model-devtools-time-travel-dialog');
+        if (!dialog) {
+            dialog = document.createElement('div');
+            dialog.id = "model-devtools-time-travel-dialog";
+        }
 
         // Формуємо список станів
         const statesList = this.history.map((snapshot, index) => `
@@ -155,29 +182,35 @@ class ModelDevTools {
                 <div>Type: ${snapshot.type}</div>
                 <div>Property: ${snapshot.property || snapshot.event || snapshot.path || ''}</div>
                 <div>Value: ${snapshot.oldValue + " -> " + snapshot.newValue}</div>
-                <button style="margin-top: 8px; background: dodgerblue;" onclick="window.__MODEL_DEVTOOLS__.timeTravel(${index})">
+                <button data-time-travel-index="${index}">
                     Go to this state
                 </button>
             </div>
         `).join('');
 
         dialog.innerHTML = `
-            <div style="display: flex; gap: 10px;">
-                <h3 style="margin: 0">Time Travel</h3>
+            <div class="dev-tools-header">
+                <span>Time Travel</span>
                 <button style="margin-left: auto" onclick="this.parentElement.parentElement.remove()">×</button>
             </div>
-            <div>${statesList || 'Nothing to show!'}</div>
+            <div class="time-travel-items">${statesList || '<div style="height: 100%; display: flex; align-items: center; justify-content: center;">Nothing to show!</div>'}</div>
         `;
 
         document.body.appendChild(dialog);
         
+        dialog.querySelectorAll('[data-time-travel-index]').forEach(button => {
+            button.onclick = () => {
+                const index = button.getAttribute('data-time-travel-index');
+                this.timeTravel(index);
+            }
+        })
+        
         if (!statesList) {
             setTimeout(() => {
-                dialog.remove();
+                //dialog.remove();
             }, 2000)
         } 
     }
-
 
     createToggleButton() {
         const button = document.createElement('button');
@@ -342,6 +375,11 @@ class ModelDevTools {
                 <pre>${JSON.stringify(recentChanges, null, 2)}</pre>
             </div>
         `;
+        
+        const timeTravelDialog = document.getElementById('model-devtools-time-travel-dialog');
+        if (timeTravelDialog) {
+            this.showTimeTravelDialog();
+        }
     }
 
     getComputedValues() {
@@ -372,7 +410,7 @@ class ModelDevTools {
         if (index < 0 || index >= this.history.length) return;
 
         const snapshot = this.history[index];
-        this.model.loadState(JSON.stringify(snapshot.state));
+        this.model.loadStateFromSnapshot(snapshot.state);
         this.currentIndex = index;
     }
 

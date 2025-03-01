@@ -560,6 +560,47 @@ class Model extends EventEmitter {
             });
         }
     }
+    
+    loadStateFromSnapshot(snapshot) {
+        if (!snapshot) {
+            console.error('Snapshot is undefined or null');
+            return;
+        }
+
+        try {
+            const computed = {}
+            
+            for (const key in snapshot) {
+                if (typeof snapshot[key] === 'function') {
+                    computed[key] = {
+                        getter: snapshot[key],
+                        value: null,
+                        dependencies: [] // Будет заполнено при первом вызове
+                    };
+                } else {
+                    this.data[key] = snapshot[key];
+                }
+            }
+
+            // Запускаємо подію про оновлення стану
+            this.emit('stateRestored', {
+                timestamp: Date.now(),
+                snapshot
+            });
+
+            return true;
+        } catch (error) {
+            console.error('Error loading state from snapshot:', error);
+
+            // Запускаємо подію про помилку
+            this.emit('stateRestoreError', {
+                error,
+                snapshot
+            });
+
+            return false;
+        }
+    }
 
     // Допоміжний метод для отримання всіх обчислюваних значень
     getComputedValues() {

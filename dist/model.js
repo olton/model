@@ -1,7 +1,7 @@
 
 /*!
- * Model v0.5.0
- * Build: 01.03.2025, 23:19:15
+ * Model v0.6.0
+ * Build: 01.03.2025, 23:31:12
  * Copyright 2012-2025 by Serhii Pimenov
  * Licensed under MIT
  */
@@ -77,6 +77,14 @@ var DevToolsWindowStyle = `
             border: 1px solid #333;
             z-index: 9999;
             font-family: monospace;
+            
+            .devtools-section:not(:last-child) {
+                border-bottom: 1px solid #333;
+            }
+            
+            h3 {
+                margin: 0;
+            }
         }
         
         #model-dev-tools-toggle-button {
@@ -94,25 +102,34 @@ var DevToolsWindowStyle = `
 
         #model-devtools-time-travel-dialog {
             position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+            bottom: 0;
+            right: 300px;
             background: #2a2a2a;
-            padding: 10px;
             border: 1px solid #444;
             border-radius: 4px;
-            max-height: 80vh;
-            overflow-y: auto;
+            height: 400px;
+            width: 300px;
             z-index: 10000;
             color: #fff;
             font-family: monospace;
             
+            .time-travel-items {
+                padding: 8px; height: calc(100% - 35px); 
+                overflow: auto;
+                position: relative;
+            }
+            
             .time-travel-item {
                 padding: 8px;
-                margin: 4px 0;
+                margin: 4px;
                 border: 1px solid #444;
                 cursor: pointer;
                 hover: background-color: #333;
+                
+                button {
+                    margin-top: 8px;
+                    background: dodgerblue;
+                }
             }
         }
         
@@ -142,6 +159,13 @@ var DevToolsWindowStyle = `
                 }
             }        
         }
+        
+        .dev-tools-header {
+            padding: 8px; 
+            border-bottom: 1px solid #333; 
+            display: flex; 
+            justify-content: space-between;
+        }
     </style>
 `;
 var ModelDevTools = class {
@@ -169,7 +193,7 @@ var ModelDevTools = class {
     const header = document.createElement("div");
     header.innerHTML = `
             ${DevToolsWindowStyle}
-            <div style="padding: 8px; border-bottom: 1px solid #333; display: flex; justify-content: space-between;">
+            <div class="dev-tools-header">
                 <span>Model DevTools</span>
                 <div>
                     <button id="devtools-time-travel" title="Time Travel">\u23F1</button>
@@ -192,30 +216,38 @@ var ModelDevTools = class {
     document.getElementById("devtools-time-travel").onclick = () => this.showTimeTravelDialog();
   }
   showTimeTravelDialog() {
-    const dialog = document.createElement("div");
-    dialog.id = "model-devtools-time-travel-dialog";
+    let dialog = document.getElementById("model-devtools-time-travel-dialog");
+    if (!dialog) {
+      dialog = document.createElement("div");
+      dialog.id = "model-devtools-time-travel-dialog";
+    }
     const statesList = this.history.map((snapshot, index) => `
             <div class="time-travel-item">
                 <div>Time: ${new Date(snapshot.timestamp).toLocaleTimeString()}</div>
                 <div>Type: ${snapshot.type}</div>
                 <div>Property: ${snapshot.property || snapshot.event || snapshot.path || ""}</div>
                 <div>Value: ${snapshot.oldValue + " -> " + snapshot.newValue}</div>
-                <button style="margin-top: 8px; background: dodgerblue;" onclick="window.__MODEL_DEVTOOLS__.timeTravel(${index})">
+                <button data-time-travel-index="${index}">
                     Go to this state
                 </button>
             </div>
         `).join("");
     dialog.innerHTML = `
-            <div style="display: flex; gap: 10px;">
-                <h3 style="margin: 0">Time Travel</h3>
+            <div class="dev-tools-header">
+                <span>Time Travel</span>
                 <button style="margin-left: auto" onclick="this.parentElement.parentElement.remove()">\xD7</button>
             </div>
-            <div>${statesList || "Nothing to show!"}</div>
+            <div class="time-travel-items">${statesList || '<div style="height: 100%; display: flex; align-items: center; justify-content: center;">Nothing to show!</div>'}</div>
         `;
     document.body.appendChild(dialog);
+    dialog.querySelectorAll("[data-time-travel-index]").forEach((button) => {
+      button.onclick = () => {
+        const index = button.getAttribute("data-time-travel-index");
+        this.timeTravel(index);
+      };
+    });
     if (!statesList) {
       setTimeout(() => {
-        dialog.remove();
       }, 2e3);
     }
   }
@@ -349,6 +381,10 @@ var ModelDevTools = class {
                 <pre>${JSON.stringify(recentChanges, null, 2)}</pre>
             </div>
         `;
+    const timeTravelDialog = document.getElementById("model-devtools-time-travel-dialog");
+    if (timeTravelDialog) {
+      this.showTimeTravelDialog();
+    }
   }
   getComputedValues() {
     return Object.fromEntries(
@@ -372,7 +408,7 @@ var ModelDevTools = class {
     if (!this.options.timeTravel) return;
     if (index < 0 || index >= this.history.length) return;
     const snapshot = this.history[index];
-    this.model.loadState(JSON.stringify(snapshot.state));
+    this.model.loadStateFromSnapshot(snapshot.state);
     this.currentIndex = index;
   }
   // Методи для аналізу продуктивності
@@ -832,6 +868,39 @@ var Model = class _Model extends event_emmiter_default {
       });
     }
   }
+  loadStateFromSnapshot(snapshot) {
+    if (!snapshot) {
+      console.error("Snapshot is undefined or null");
+      return;
+    }
+    try {
+      const computed = {};
+      for (const key in snapshot) {
+        if (typeof snapshot[key] === "function") {
+          computed[key] = {
+            getter: snapshot[key],
+            value: null,
+            dependencies: []
+            // Будет заполнено при первом вызове
+          };
+        } else {
+          this.data[key] = snapshot[key];
+        }
+      }
+      this.emit("stateRestored", {
+        timestamp: Date.now(),
+        snapshot
+      });
+      return true;
+    } catch (error) {
+      console.error("Error loading state from snapshot:", error);
+      this.emit("stateRestoreError", {
+        error,
+        snapshot
+      });
+      return false;
+    }
+  }
   // Допоміжний метод для отримання всіх обчислюваних значень
   getComputedValues() {
     return Object.fromEntries(
@@ -910,8 +979,8 @@ var Model = class _Model extends event_emmiter_default {
 var model_default = Model;
 
 // src/index.js
-var version = "0.5.0";
-var build_time = "01.03.2025, 23:19:15";
+var version = "0.6.0";
+var build_time = "01.03.2025, 23:31:12";
 model_default.info = () => {
   console.info(`%c Model %c v${version} %c ${build_time} `, "color: white; font-weight: bold; background: #0080fe", "color: white; background: darkgreen", "color: white; background: #0080fe;");
 };
