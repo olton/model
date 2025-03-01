@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+</head>
+<body>
+<div>
+<h1>Counter</h1>
+    <div>Counter: {{ counter }}</div>
+    <div><input class="text-center" type="text" data-model="counter"></div>
+    <div>Статус: {{ status }}</div>
+    <div class="m-2 d-flex flex-row gap-2">
+        <button onclick="updateCounter('+')">+</button>
+        <button onclick="updateCounter('-')">-</button>
+    </div>
+</div>
+<script type="module">
+    import Model from "../src/index.js";
+    var app = new Model({
+        counter: 0,
+        status: function () {
+            return this.counter === 0 ? "Zero" : this.counter > 0 ? "Positive" : "Negative";
+        }
+    })
+
+    app.init()
+
+    globalThis.updateCounter = (operator) => {
+        operator === "-" ? app.data.counter-- : app.data.counter++
+    }
+</script>
+</body>
+</html>
