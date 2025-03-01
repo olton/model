@@ -887,14 +887,14 @@ var Model = class _Model extends event_emmiter_default {
           this.data[key] = snapshot[key];
         }
       }
-      this.emit("stateRestored", {
+      this.emit("restoreState", {
         timestamp: Date.now(),
         snapshot
       });
       return true;
     } catch (error) {
       console.error("Error loading state from snapshot:", error);
-      this.emit("stateRestoreError", {
+      this.emit("restoreStateError", {
         error,
         snapshot
       });
@@ -969,6 +969,7 @@ var Model = class _Model extends event_emmiter_default {
     this.parseConditionals(rootElement);
     this.parse(rootElement);
     this.updateAllDOM();
+    this.emit("init");
     return this;
   }
   // Ініціюємо DevTools

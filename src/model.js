@@ -583,7 +583,7 @@ class Model extends EventEmitter {
             }
 
             // Запускаємо подію про оновлення стану
-            this.emit('stateRestored', {
+            this.emit('restoreState', {
                 timestamp: Date.now(),
                 snapshot
             });
@@ -593,7 +593,7 @@ class Model extends EventEmitter {
             console.error('Error loading state from snapshot:', error);
 
             // Запускаємо подію про помилку
-            this.emit('stateRestoreError', {
+            this.emit('restoreStateError', {
                 error,
                 snapshot
             });
@@ -663,7 +663,6 @@ class Model extends EventEmitter {
 
     // Допоміжний метод для вилучення змінних з виразу
     extractVariables(expression) {
-        // Простий регулярний вираз для пошуку змінних
         const matches = expression.match(/\b[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*\b/g) || [];
         return [...new Set(matches)];
     }
@@ -671,7 +670,6 @@ class Model extends EventEmitter {
     // Метод для оцінки виразу
     evaluateExpression(expression, context) {
         try {
-            // Створюємо безпечну функцію для оцінки виразу
             const func = new Function(...Object.keys(context), `return ${expression}`);
             return func(...Object.values(context));
         } catch (error) {
@@ -696,6 +694,8 @@ class Model extends EventEmitter {
         this.parse(rootElement);
         this.updateAllDOM();
 
+        this.emit('init');
+        
         return this;
     }
 
