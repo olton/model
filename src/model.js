@@ -3,13 +3,25 @@ const ModelOptions = {
 }
 
 class Model {
+    static DEBUG = false
+    static log = (...args) => {
+        if (Model.DEBUG) {
+            console.log(...args);
+        }
+    }
+
+
     constructor(data = {}, options = {}) {
+        Model.log('Ініціалізація Model з даними:', data);
+
         this.options = Object.assign({}, ModelOptions, options);
         this.elements = [];
         this.inputs = [];
         this.computed = {};
         this.watchers = new Map(); // Додаємо спостерігачів
         this.batchUpdate = false;
+        this.loops = new Map();
+
 
         // Регистрируем вычисляемые свойства
         for (const key in data) {
@@ -25,6 +37,128 @@ class Model {
 
         this.data = this.createReactiveProxy(data);
     }
+
+    parseLoops(rootElement) {
+        Model.log('Шукаємо елементи з m-for');
+        const loopElements = rootElement.querySelectorAll('[m-for]');
+        Model.log('Знайдено елементів з m-for:', loopElements.length);
+
+        loopElements.forEach((element, index) => {
+            const expression = element.getAttribute('m-for').trim();
+            Model.log(`Обробка елементу ${index}:`, expression);
+
+            const matches = expression.match(/^\s*(\w+)(?:\s*,\s*(\w+))?\s+in\s+(\w+(?:\.\w+)*)\s*$/);
+
+            if (!matches) {
+                console.error('Неправильний формат виразу m-for:', expression);
+                return;
+            }
+
+            const [_, itemName, indexName, arrayPath] = matches;
+            Model.log('Розібрано вираз:', {itemName, indexName, arrayPath});
+
+            const array = this.getValueByPath(arrayPath);
+            Model.log('Отримано масив:', array);
+
+            if (!Array.isArray(array)) {
+                console.error(`Значення за шляхом ${arrayPath} не є масивом:`, array);
+                return;
+            }
+
+            const template = element.cloneNode(true);
+
+            this.loops.set(element, {
+                template,
+                itemName,
+                indexName,
+                arrayPath,
+                parentNode: element.parentNode
+            });
+
+            Model.log('Оновлюємо цикл для елементу');
+            this.updateLoop(element);
+        });
+    }
+
+    updateLoop(element) {
+        const loopInfo = this.loops.get(element);
+        if (!loopInfo) {
+            console.error('Не знайдено інформацію про цикл для елементу');
+            return;
+        }
+
+        const {template, itemName, indexName, arrayPath, parentNode} = loopInfo;
+        const array = this.getValueByPath(arrayPath);
+
+        Model.log('Оновлення циклу для масиву:', array);
+
+        if (!Array.isArray(array)) {
+            console.error('Значення не є масивом:', array);
+            return;
+        }
+
+        // Видаляємо попередні згенеровані елементи
+        const generated = parentNode.querySelectorAll(`[data-generated-for="${arrayPath}"]`);
+        generated.forEach(el => el.remove());
+
+        // Створюємо нові елементи
+        array.forEach((item, index) => {
+            const newNode = template.cloneNode(true);
+            newNode.style.display = '';
+            newNode.removeAttribute('m-for');
+            newNode.setAttribute('data-generated-for', arrayPath);
+
+            // Замінюємо змінні в шаблоні
+            this.processTemplateNode(newNode, {
+                [itemName]: item,
+                [indexName || 'index']: index
+            });
+
+            parentNode.insertBefore(newNode, element);
+        });
+
+        // Приховуємо оригінальний шаблон
+        element.style.display = 'none';
+
+    }
+
+    processTemplateNode(node, context) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            const originalText = node.textContent;
+            const newText = node.textContent.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
+                path = path.trim();
+                const value = context && path in context ? context[path] : this.getValueByPath(path);
+                Model.log('Заміна в шаблоні:', {original: match, path, value});
+                return value;
+            });
+            if (originalText !== newText) {
+                node.textContent = newText;
+            }
+        } else if (node.nodeType === Node.ELEMENT_NODE) {
+            // Обробка атрибутів та дочірніх елементів...
+            Array.from(node.childNodes).forEach(child => {
+                this.processTemplateNode(child, context);
+            });
+        }
+    }
+
+    // bindLoopEvents(node, item, index) {
+    //     const clickHandler = node.getAttribute('m-on:click');
+    //     if (clickHandler) {
+    //         node.addEventListener('click', (event) => {
+    //             // Створюємо контекст для обробника
+    //             const context = {
+    //                 item,
+    //                 index,
+    //                 event,
+    //                 target: event.target
+    //             };
+    //
+    //             // Виконуємо обробник у контексті моделі
+    //             this.executeHandler(clickHandler, context);
+    //         });
+    //     }
+    // }
 
     batch(callback) {
         this.batchUpdate = true;
@@ -57,8 +191,43 @@ class Model {
         this.formatters.set(propertyPath, formatter);
     }
 
+    // Оновлюємо метод createArrayProxy
+    createArrayProxy(array, path = '') {
+        return new Proxy(array, {
+            get: (target, property) => {
+                Model.log('ArrayProxy get:', {path, property});
+                return target[property];
+            },
+
+            set: (target, property, value) => {
+                Model.log('ArrayProxy set:', {path, property, value});
+
+                if (typeof property === 'symbol') {
+                    target[property] = value;
+                    return true;
+                }
+
+                target[property] = value;
+
+                // Оновлюємо всі цикли, що використовують цей масив
+                this.loops.forEach((loopInfo, element) => {
+                    if (loopInfo.arrayPath === path) {
+                        this.updateLoop(element);
+                    }
+                });
+
+                return true;
+            }
+        });
+    }
+
     // Новий метод для створення реактивного проксі
     createReactiveProxy(obj, path = '') {
+        // Якщо отримуємо масив, створюємо для нього спеціальний проксі
+        if (Array.isArray(obj)) {
+            return this.createArrayProxy(obj, path);
+        }
+
         return new Proxy(obj, {
             set: (target, property, value) => {
                 if (typeof property === 'symbol') {
@@ -182,17 +351,7 @@ class Model {
     }
 
     // Парсимо DOM для пошуку виразів {{ змінна }}
-    parse(rootElement) {
-        let root;
-
-        if (typeof rootElement === 'string') {
-            root = document.querySelector(rootElement);
-        } else if (rootElement instanceof HTMLElement) {
-            root = rootElement;
-        } else {
-            root = document.body;
-        }
-
+    parse(root) {
         const walker = document.createTreeWalker(
             root,
             NodeFilter.SHOW_TEXT,
@@ -303,31 +462,30 @@ class Model {
         });
     }
 
-    // Новий метод для отримання значення за шляхом
+    // Метод для отримання значення за шляхом
     getValueByPath(path) {
-        if (path in this.computed) {
-            return this.evaluateComputed(path);
-        }
+        Model.log('Отримання значення за шляхом:', path);
+        let value = this.data;
+        if (!path) return value;
 
         const parts = path.split('.');
-        let current = this.data;
-
         for (const part of parts) {
-            if (current === undefined || current === null) {
-                return '';
+            if (value === undefined || value === null) {
+                console.error(`Шлях ${path} обірвався на ${part}`);
+                return undefined;
             }
-            current = current[part];
+            value = value[part];
         }
-
-        return current;
-
+        Model.log('Отримане значення:', value);
+        return value;
     }
 
-    // Додаємо збереження стану
+    // Збереження стану
     saveState() {
         localStorage.setItem(this.options.id, JSON.stringify(this.data));
     }
 
+    // Відновлення стану
     loadState() {
         const savedState = localStorage.getItem(this.options.id);
         if (savedState) {
@@ -338,11 +496,80 @@ class Model {
         }
     }
 
+    // Парсимо DOM для пошуку умовних виразів
+    parseConditionals(rootElement) {
+        Model.log('Шукаємо елементи з m-if');
+        const conditionalElements = rootElement.querySelectorAll('[m-if]');
+        Model.log('Знайдено елементів з m-if:', conditionalElements.length);
+
+        conditionalElements.forEach((element) => {
+            const expression = element.getAttribute('m-if').trim();
+            Model.log('Обробка умовного виразу:', expression);
+
+            // Зберігаємо original display value
+            const originalDisplay = element.style.display;
+
+            // Створюємо функцію оновлення видимості
+            const updateVisibility = () => {
+                try {
+                    // Створюємо контекст з даними моделі
+                    const context = {...this.data};
+                    // Оцінюємо вираз
+                    const result = this.evaluateExpression(expression, context);
+
+                    element.style.display = result ? originalDisplay || '' : 'none';
+                    Model.log(`Результат виразу ${expression}:`, result);
+                } catch (error) {
+                    console.error('Помилка при обробці m-if:', error);
+                }
+            };
+
+            // Додаємо спостерігач за змінними у виразі
+            const variables = this.extractVariables(expression);
+            variables.forEach(variable => {
+                this.watch(variable, () => updateVisibility());
+            });
+
+            // Початкове оновлення
+            updateVisibility();
+        });
+    }
+
+    // Допоміжний метод для вилучення змінних з виразу
+    extractVariables(expression) {
+        // Простий регулярний вираз для пошуку змінних
+        const matches = expression.match(/\b[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*\b/g) || [];
+        return [...new Set(matches)];
+    }
+
+    // Метод для оцінки виразу
+    evaluateExpression(expression, context) {
+        try {
+            // Створюємо безпечну функцію для оцінки виразу
+            const func = new Function(...Object.keys(context), `return ${expression}`);
+            return func(...Object.values(context));
+        } catch (error) {
+            console.error('Помилка при оцінці виразу:', error);
+            return false;
+        }
+    }
+
     // Ініціюємо модель на відповідному DOM елементі
-    init(rootElement) {
+    init(selector) {
+        const rootElement = typeof selector === 'string'
+            ? document.querySelector(selector)
+            : selector;
+
+        if (!rootElement) {
+            console.error('The root element was not found!');
+            return;
+        }
+
+        this.parseLoops(rootElement);
+        this.parseConditionals(rootElement);
         this.parse(rootElement);
         this.updateAllDOM();
-        
+
         return this;
     }
 }

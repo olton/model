@@ -5,8 +5,12 @@
     <title>Title</title>
 </head>
 <body>
-<div>
+<div id="root">
 <h1>Counter</h1>
+    <div m-for="item in items">
+        Item: {{ item }}
+    </div>
+
     <div>
         <p>Ім'я: {{ user.name }}
         <p>Місто: {{ user.address.city }}
@@ -20,14 +24,28 @@
     <div>Counter: {{ counter }}</div>
     <div><input class="text-center" type="text" data-model="counter"></div>
     <div>Статус: {{ status }}</div>
+    <!-- Додаємо нові блоки з m-if -->
+    <div m-if="counter > 0">
+        Лічильник більший за нуль
+    </div>
+    <div m-if="counter < 0">
+        Лічильник менший за нуль
+    </div>
+    <div m-if="counter === 0">
+        Лічильник дорівнює нулю
+    </div>
+
     <div class="m-2 d-flex flex-row gap-2">
         <button onclick="updateCounter('+')">+</button>
         <button onclick="updateCounter('-')">-</button>
+        <button onclick="updateArray()">Upd Array</button>
     </div>
 </div>
 <script type="module">
     import Model from "../src/index.js";
+    // Model.DEBUG = true;
     const app = new Model({
+        items: ['Перший', 'Другий', 'Третій'],
         counter: 10,
         status: function () {
             return this.counter === 0 ? "Zero" : this.counter > 0 ? "Positive" : "Negative";
@@ -45,12 +63,16 @@
         },
     })
 
-    app.init()
+    app.init("#root")
 
     globalThis.updateCounter = (operator) => {
         operator === "-" ? app.data.counter-- : app.data.counter++
     }
 
+    globalThis.updateArray = () => {
+        app.data.items.push('Новий елемент');
+    }
+    
     // Валідація
     // app.addValidator('username', value => value.length >= 3);
 
@@ -58,9 +80,9 @@
     // app.addFormatter('username', value => value.trim());
 
     // Спостерігач
-    app.watch('counter', (newValue, oldValue) => {
-        console.log(`Counter змінився з ${oldValue} на ${newValue}`);
-    });
+    // app.watch('counter', (newValue, oldValue) => {
+    //     console.log(`Counter змінився з ${oldValue} на ${newValue}`);
+    // });
 
     // Групове оновлення
     // app.batch(() => {
