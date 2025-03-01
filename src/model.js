@@ -1,5 +1,6 @@
 import EventEmitter from './event-emmiter.js';
 import MiddlewareManager from "./middleware.js";
+import DevTools from "./dev-tools.js";
 
 const ModelOptions = {
     id: "model",
@@ -27,6 +28,7 @@ class Model extends EventEmitter {
         this.loops = new Map();
         this.events = new Map();
         this.middleware = new MiddlewareManager();
+        this.autoSaveInterval = null;
 
         // Регистрируем вычисляемые свойства
         for (const key in data) {
@@ -490,20 +492,63 @@ class Model extends EventEmitter {
 
     // Збереження стану
     saveState() {
-        localStorage.setItem(this.options.id, JSON.stringify(this.data));
+        const state = {
+            data: this.data,
+            computed: Object.fromEntries(
+                Object.entries(this.computed)
+                    .map(([key, comp]) => [key, comp.value])
+            )
+        };
+
+        localStorage.setItem(this.options.id, JSON.stringify(state));
+        Model.log('State saved:', state);
+        this.emit('saveState', state);
+        return state;
     }
 
     // Відновлення стану
     loadState() {
         const savedState = localStorage.getItem(this.options.id);
         if (savedState) {
-            const newState = JSON.parse(savedState);
-            this.batch(() => {
-                Object.assign(this.data, newState);
+            const parsed = JSON.parse(savedState);
+            // Оновлюємо основні дані
+            Object.assign(this.data, parsed.data);
+            
+            // Перераховуємо всі обчислювані властивості
+            if (parsed.computed) {
+                for (const key of Object.keys(this.computed)) {
+                    // Викликаємо getter для перерахунку значення
+                    this.computed[key].value = this.computed[key].getter.call(this.data);
+                }
+            }
+            // Викликаємо подію про завантаження стану
+            this.emit('loadState', {
+                data: parsed.data,
+                computed: this.getComputedValues()
             });
         }
     }
 
+    // Допоміжний метод для отримання всіх обчислюваних значень
+    getComputedValues() {
+        return Object.fromEntries(
+            Object.entries(this.computed)
+                .map(([key, comp]) => [key, comp.value])
+        );
+    }
+
+    // Автоматичне збереження в localStorage
+    enableAutoSave(interval = 5000) {
+        this.autoSaveInterval = setInterval(() => {
+            this.saveState()
+        }, interval);
+    }
+
+    // Вимкнення автоматичного збереження
+    disableAutoSave() {
+        clearInterval(this.autoSaveInterval);
+    }
+    
     // Парсимо DOM для пошуку умовних виразів
     parseConditionals(rootElement) {
         Model.log('Looking for items with data-if');
@@ -580,6 +625,12 @@ class Model extends EventEmitter {
 
         return this;
     }
+
+    // Ініціюємо DevTools
+    initDevTools(options = {}) {
+        return new DevTools(this, options);
+    }
+
 }
 
 export default Model;

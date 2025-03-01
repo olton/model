@@ -44,6 +44,7 @@
         <button onclick="updateCounter('-')">-</button>
         <button onclick="updateArray()">Upd Array</button>
     </div>
+    
 </div>
 <script type="module">
     import Model from "../dist/model.js";
@@ -121,6 +122,12 @@
     //     app.loadState();
     //     app.init();
     // });
+
+    const devTools = app.initDevTools({
+        enabled: true,
+        timeTravel: true,
+        maxSnapshots: 50
+    });
 
 </script>
 </body>
