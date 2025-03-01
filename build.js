@@ -20,6 +20,7 @@ const options = {
     outfile: './dist/model.js',
     bundle: true,
     sourcemap: false,
+    format: "esm",
     banner: {
         js: banner
     },
