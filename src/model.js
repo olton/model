@@ -387,6 +387,7 @@ class Model extends EventEmitter {
 
             // Если изменившееся свойство находится в зависимостях
             if (computed.dependencies.includes(changedProp)) {
+                console.log(`Updating computed property: ${key}`);
                 const newValue = this.evaluateComputed(key);
 
                 // Обновляем DOM для вычисляемого свойства
