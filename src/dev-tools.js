@@ -154,6 +154,7 @@ class ModelDevTools {
                 <div>Time: ${new Date(snapshot.timestamp).toLocaleTimeString()}</div>
                 <div>Type: ${snapshot.type}</div>
                 <div>Property: ${snapshot.property || snapshot.event || snapshot.path || ''}</div>
+                <div>Value: ${snapshot.oldValue + " -> " + snapshot.newValue}</div>
                 <button style="margin-top: 8px; background: dodgerblue;" onclick="window.__MODEL_DEVTOOLS__.timeTravel(${index})">
                     Go to this state
                 </button>
@@ -359,14 +360,11 @@ class ModelDevTools {
         if (panel) {
             panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
         }
-        console.log(panel.style.display)
     }
 
     // API для консолі розробника
     inspect(path) {
-        const value = this.model.getValueByPath(path);
-        console.log(`Value ${path}:`, value);
-        return value;
+        return this.model.getValueByPath(path);
     }
 
     timeTravel(index) {
@@ -376,7 +374,6 @@ class ModelDevTools {
         const snapshot = this.history[index];
         this.model.loadState(JSON.stringify(snapshot.state));
         this.currentIndex = index;
-        console.log(`Transition to a state:`, snapshot);
     }
 
     // Методи для аналізу продуктивності
