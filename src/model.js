@@ -24,7 +24,7 @@ class Model extends EventEmitter {
         this.inputs = [];
         this.computed = {};
         this.watchers = new Map(); // Додаємо спостерігачів
-        this.batchUpdate = false;
+        this.batchProcessing = false;
         this.loops = new Map();
         this.events = new Map();
         this.middleware = new MiddlewareManager();
@@ -152,14 +152,40 @@ class Model extends EventEmitter {
         }
     }
 
-    // Пакетне оновлення
+    // Пакетне оновлення: аргумент - функція або об'єкт
     batch(callback) {
-        this.batchUpdate = true;
-        callback();
-        this.batchUpdate = false;
-        this.updateAllDOM();
+        this.batchProcessing = true;
+
+        try {
+            if (typeof callback === 'function') {
+                callback();
+            } else {
+                for (const [path, value] of Object.entries(callback)) {
+                    this.setValueByPath(path, value);
+                }
+            }
+        } finally {
+            this.updateAllDOM();
+            this.batchProcessing = false;
+            this.emit('batchComplete');
+        }
     }
 
+    setValueByPath(path, value) {
+        Model.log('Setting value by path:', {path, value});
+        const parts = path.split('.');
+        let current = this.data;
+
+        for (let i = 0; i < parts.length - 1; i++) {
+            if (!(parts[i] in current)) {
+                current[parts[i]] = {};
+            }
+            current = current[parts[i]];
+        }
+
+        current[parts[parts.length - 1]] = value;
+    }
+    
     // Додаємо спостерігачів (watchers)
     watch(propertyPath, callback) {
         if (!this.watchers.has(propertyPath)) {
@@ -280,7 +306,7 @@ class Model extends EventEmitter {
                     );
                 }
 
-                if (!this.batchUpdate) {
+                if (!this.batchProcessing) {
                     this.updateDOM(fullPath, value);
                     this.updateInputs(fullPath, value);
                     this.updateComputedProperties(fullPath);
@@ -345,6 +371,12 @@ class Model extends EventEmitter {
         computed.dependencies = [...dependencies];
         computed.value = result;
 
+        this.emit('compute', {
+            key,
+            value: result,
+            dependencies,
+        });
+        
         return result;
     }
 

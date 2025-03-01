@@ -77,36 +77,21 @@ var DevToolsWindowStyle = `
             border: 1px solid #333;
             z-index: 9999;
             font-family: monospace;
+        }
         
-            button {
-                height: 20px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 12px;
-                border-radius: 4px;
-                border: 1px solid #444;
-                background: #333;
-                color: #fff;
-                cursor: pointer;
-                
-                @media (hover: hover) {
-                    &:hover {
-                        background: #444;
-                    }
-                }
-
-                @media (hover: none) {
-                    &:hover {
-                        background: #444;
-                    }
-                }
-            }
+        #model-dev-tools-toggle-button {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            z-index: 9998;
+            padding: 5px 10px;
+            background: #444;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
         }        
-    </style>
-`;
-var TimeTravelDialogStyle = `
-    <style>
+
         #model-devtools-time-travel-dialog {
             position: fixed;
             top: 50%;
@@ -121,7 +106,17 @@ var TimeTravelDialogStyle = `
             z-index: 10000;
             color: #fff;
             font-family: monospace;
+            
+            .time-travel-item {
+                padding: 8px;
+                margin: 4px 0;
+                border: 1px solid #444;
+                cursor: pointer;
+                hover: background-color: #333;
+            }
+        }
         
+        #model-devtools-panel, #model-devtools-time-travel-dialog {
             button {
                 height: 20px;
                 display: inline-flex;
@@ -145,7 +140,7 @@ var TimeTravelDialogStyle = `
                         background: #444;
                     }
                 }
-            }
+            }        
         }
     </style>
 `;
@@ -177,8 +172,8 @@ var ModelDevTools = class {
             <div style="padding: 8px; border-bottom: 1px solid #333; display: flex; justify-content: space-between;">
                 <span>Model DevTools</span>
                 <div>
-                    <button id="devtools-time-travel">Time Travel</button>
-                    <button id="devtools-close">\xD7</button>
+                    <button id="devtools-time-travel" title="Time Travel">\u23F1</button>
+                    <button id="devtools-close" title="Close">\xD7</button>
                 </div>
             </div>
         `;
@@ -200,13 +195,7 @@ var ModelDevTools = class {
     const dialog = document.createElement("div");
     dialog.id = "model-devtools-time-travel-dialog";
     const statesList = this.history.map((snapshot, index) => `
-            <div class="time-travel-item" style="
-                padding: 8px;
-                margin: 4px 0;
-                border: 1px solid #444;
-                cursor: pointer;
-                hover: background-color: #333;
-            ">
+            <div class="time-travel-item">
                 <div>Time: ${new Date(snapshot.timestamp).toLocaleTimeString()}</div>
                 <div>Type: ${snapshot.type}</div>
                 <div>Property: ${snapshot.property || snapshot.event || snapshot.path || ""}</div>
@@ -216,7 +205,6 @@ var ModelDevTools = class {
             </div>
         `).join("");
     dialog.innerHTML = `
-            ${TimeTravelDialogStyle}
             <div style="display: flex; gap: 10px;">
                 <h3 style="margin: 0">Time Travel</h3>
                 <button style="margin-left: auto" onclick="this.parentElement.parentElement.remove()">\xD7</button>
@@ -232,18 +220,7 @@ var ModelDevTools = class {
   }
   createToggleButton() {
     const button = document.createElement("button");
-    button.style.cssText = `
-            position: fixed;
-            bottom: 10px;
-            right: 10px;
-            z-index: 9998;
-            padding: 5px 10px;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        `;
+    button.id = "model-dev-tools-toggle-button";
     button.textContent = "Model DevTools";
     button.onclick = () => this.togglePanel();
     document.body.appendChild(button);
@@ -442,7 +419,7 @@ var Model = class _Model extends event_emmiter_default {
     this.inputs = [];
     this.computed = {};
     this.watchers = /* @__PURE__ */ new Map();
-    this.batchUpdate = false;
+    this.batchProcessing = false;
     this.loops = /* @__PURE__ */ new Map();
     this.events = /* @__PURE__ */ new Map();
     this.middleware = new middleware_default();
@@ -541,12 +518,34 @@ var Model = class _Model extends event_emmiter_default {
       });
     }
   }
-  // Пакетне оновлення
+  // Пакетне оновлення: аргумент - функція або об'єкт
   batch(callback) {
-    this.batchUpdate = true;
-    callback();
-    this.batchUpdate = false;
-    this.updateAllDOM();
+    this.batchProcessing = true;
+    try {
+      if (typeof callback === "function") {
+        callback();
+      } else {
+        for (const [path, value] of Object.entries(callback)) {
+          this.setValueByPath(path, value);
+        }
+      }
+    } finally {
+      this.updateAllDOM();
+      this.batchProcessing = false;
+      this.emit("batchComplete");
+    }
+  }
+  setValueByPath(path, value) {
+    _Model.log("Setting value by path:", { path, value });
+    const parts = path.split(".");
+    let current = this.data;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!(parts[i] in current)) {
+        current[parts[i]] = {};
+      }
+      current = current[parts[i]];
+    }
+    current[parts[parts.length - 1]] = value;
   }
   // Додаємо спостерігачів (watchers)
   watch(propertyPath, callback) {
@@ -639,7 +638,7 @@ var Model = class _Model extends event_emmiter_default {
             (callback) => callback(value, oldValue)
           );
         }
-        if (!this.batchUpdate) {
+        if (!this.batchProcessing) {
           this.updateDOM(fullPath, value);
           this.updateInputs(fullPath, value);
           this.updateComputedProperties(fullPath);
@@ -687,6 +686,11 @@ var Model = class _Model extends event_emmiter_default {
     const result = computed.getter.call(dataTracker);
     computed.dependencies = [...dependencies];
     computed.value = result;
+    this.emit("compute", {
+      key,
+      value: result,
+      dependencies
+    });
     return result;
   }
   // Обновление вычисляемых свойств при изменении зависимостей
