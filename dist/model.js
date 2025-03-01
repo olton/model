@@ -1,7 +1,7 @@
 
 /*!
- * Model v0.4.0
- * Build: 01.03.2025, 20:43:19
+ * Model v0.5.0
+ * Build: 01.03.2025, 20:53:10
  * Copyright 2012-2025 by Serhii Pimenov
  * Licensed under MIT
  */
@@ -75,7 +75,7 @@ var Model = class _Model extends event_emmiter_default {
     }
   };
   constructor(data = {}, options = {}) {
-    _Model.log("\u0406\u043D\u0456\u0446\u0456\u0430\u043B\u0456\u0437\u0430\u0446\u0456\u044F Model \u0437 \u0434\u0430\u043D\u0438\u043C\u0438:", data);
+    _Model.log("Model initialization with data:", data);
     super();
     this.options = Object.assign({}, ModelOptions, options);
     this.elements = [];
@@ -101,23 +101,23 @@ var Model = class _Model extends event_emmiter_default {
   }
   // Парсимо DOM для пошуку циклів
   parseLoops(rootElement) {
-    _Model.log("\u0428\u0443\u043A\u0430\u0454\u043C\u043E \u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0438 \u0437 data-for");
+    _Model.log("Looking for items with data-for");
     const loopElements = rootElement.querySelectorAll("[data-for]");
-    _Model.log("\u0417\u043D\u0430\u0439\u0434\u0435\u043D\u043E \u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0456\u0432 \u0437 data-for:", loopElements.length);
+    _Model.log("Found items from data-for:", loopElements.length);
     loopElements.forEach((element, index) => {
       const expression = element.getAttribute("data-for").trim();
-      _Model.log(`\u041E\u0431\u0440\u043E\u0431\u043A\u0430 \u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0443 ${index}:`, expression);
+      _Model.log(`Element processing ${index}:`, expression);
       const matches = expression.match(/^\s*(\w+)(?:\s*,\s*(\w+))?\s+in\s+(\w+(?:\.\w+)*)\s*$/);
       if (!matches) {
-        console.error("\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0438\u0439 \u0444\u043E\u0440\u043C\u0430\u0442 \u0432\u0438\u0440\u0430\u0437\u0443 data-for:", expression);
+        console.error("Incorrect format of expression data-for:", expression);
         return;
       }
       const [_, itemName, indexName, arrayPath] = matches;
-      _Model.log("\u0420\u043E\u0437\u0456\u0431\u0440\u0430\u043D\u043E \u0432\u0438\u0440\u0430\u0437:", { itemName, indexName, arrayPath });
+      _Model.log("The expression is dismantled:", { itemName, indexName, arrayPath });
       const array = this.getValueByPath(arrayPath);
-      _Model.log("\u041E\u0442\u0440\u0438\u043C\u0430\u043D\u043E \u043C\u0430\u0441\u0438\u0432:", array);
+      _Model.log("An array was obtained:", array);
       if (!Array.isArray(array)) {
-        console.error(`\u0417\u043D\u0430\u0447\u0435\u043D\u043D\u044F \u0437\u0430 \u0448\u043B\u044F\u0445\u043E\u043C ${arrayPath} \u043D\u0435 \u0454 \u043C\u0430\u0441\u0438\u0432\u043E\u043C:`, array);
+        console.error(`The value in the way ${arrayPath} is not an array:`, array);
         return;
       }
       const template = element.cloneNode(true);
@@ -128,7 +128,7 @@ var Model = class _Model extends event_emmiter_default {
         arrayPath,
         parentNode: element.parentNode
       });
-      _Model.log("\u041E\u043D\u043E\u0432\u043B\u044E\u0454\u043C\u043E \u0446\u0438\u043A\u043B \u0434\u043B\u044F \u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0443");
+      _Model.log("Update the cycle for the item");
       this.updateLoop(element);
     });
   }
@@ -136,14 +136,14 @@ var Model = class _Model extends event_emmiter_default {
   updateLoop(element) {
     const loopInfo = this.loops.get(element);
     if (!loopInfo) {
-      console.error("\u041D\u0435 \u0437\u043D\u0430\u0439\u0434\u0435\u043D\u043E \u0456\u043D\u0444\u043E\u0440\u043C\u0430\u0446\u0456\u044E \u043F\u0440\u043E \u0446\u0438\u043A\u043B \u0434\u043B\u044F \u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0443");
+      console.error("No cycle information found for an item");
       return;
     }
     const { template, itemName, indexName, arrayPath, parentNode } = loopInfo;
     const array = this.getValueByPath(arrayPath);
-    _Model.log("\u041E\u043D\u043E\u0432\u043B\u0435\u043D\u043D\u044F \u0446\u0438\u043A\u043B\u0443 \u0434\u043B\u044F \u043C\u0430\u0441\u0438\u0432\u0443:", array);
+    _Model.log("Update cycle for array:", array);
     if (!Array.isArray(array)) {
-      console.error("\u0417\u043D\u0430\u0447\u0435\u043D\u043D\u044F \u043D\u0435 \u0454 \u043C\u0430\u0441\u0438\u0432\u043E\u043C:", array);
+      console.error("The value is not an array:", array);
       return;
     }
     const generated = parentNode.querySelectorAll(`[data-generated-for="${arrayPath}"]`);
@@ -168,7 +168,7 @@ var Model = class _Model extends event_emmiter_default {
       const newText = node.textContent.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
         path = path.trim();
         const value = context && path in context ? context[path] : this.getValueByPath(path);
-        _Model.log("\u0417\u0430\u043C\u0456\u043D\u0430 \u0432 \u0448\u0430\u0431\u043B\u043E\u043D\u0456:", { original: match, path, value });
+        _Model.log("Replacement in the template:", { original: match, path, value });
         return value;
       });
       if (originalText !== newText) {
@@ -432,12 +432,12 @@ var Model = class _Model extends event_emmiter_default {
     const parts = path.split(".");
     for (const part of parts) {
       if (value === void 0 || value === null) {
-        console.error(`\u0428\u043B\u044F\u0445 ${path} \u043E\u0431\u0456\u0440\u0432\u0430\u0432\u0441\u044F \u043D\u0430 ${part}`);
+        console.error(`The way ${path} broke off on ${part}`);
         return void 0;
       }
       value = value[part];
     }
-    _Model.log("\u041E\u0442\u0440\u0438\u043C\u0430\u043D\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u043D\u044F:", value);
+    _Model.log("The value received:", value);
     return value;
   }
   // Збереження стану
@@ -456,21 +456,21 @@ var Model = class _Model extends event_emmiter_default {
   }
   // Парсимо DOM для пошуку умовних виразів
   parseConditionals(rootElement) {
-    _Model.log("\u0428\u0443\u043A\u0430\u0454\u043C\u043E \u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0438 \u0437 data-if");
+    _Model.log("Looking for items with data-if");
     const conditionalElements = rootElement.querySelectorAll("[data-if]");
-    _Model.log("\u0417\u043D\u0430\u0439\u0434\u0435\u043D\u043E \u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0456\u0432 \u0437 data-if:", conditionalElements.length);
+    _Model.log("Found items from data-if:", conditionalElements.length);
     conditionalElements.forEach((element) => {
       const expression = element.getAttribute("data-if").trim();
-      _Model.log("\u041E\u0431\u0440\u043E\u0431\u043A\u0430 \u0443\u043C\u043E\u0432\u043D\u043E\u0433\u043E \u0432\u0438\u0440\u0430\u0437\u0443:", expression);
+      _Model.log("Processing of conditional expression:", expression);
       const originalDisplay = element.style.display;
       const updateVisibility = () => {
         try {
           const context = { ...this.data };
           const result = this.evaluateExpression(expression, context);
           element.style.display = result ? originalDisplay || "" : "none";
-          _Model.log(`\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0432\u0438\u0440\u0430\u0437\u0443 ${expression}:`, result);
+          _Model.log(`The result of the expression ${expression}:`, result);
         } catch (error) {
-          console.error("\u041F\u043E\u043C\u0438\u043B\u043A\u0430 \u043F\u0440\u0438 \u043E\u0431\u0440\u043E\u0431\u0446\u0456 data-if:", error);
+          console.error("Error in processing data-if:", error);
         }
       };
       const variables = this.extractVariables(expression);
@@ -491,7 +491,7 @@ var Model = class _Model extends event_emmiter_default {
       const func = new Function(...Object.keys(context), `return ${expression}`);
       return func(...Object.values(context));
     } catch (error) {
-      console.error("\u041F\u043E\u043C\u0438\u043B\u043A\u0430 \u043F\u0440\u0438 \u043E\u0446\u0456\u043D\u0446\u0456 \u0432\u0438\u0440\u0430\u0437\u0443:", error);
+      console.error("Error when evaluating expression:", error);
       return false;
     }
   }
@@ -512,8 +512,8 @@ var Model = class _Model extends event_emmiter_default {
 var model_default = Model;
 
 // src/index.js
-var version = "0.4.0";
-var build_time = "01.03.2025, 20:43:19";
+var version = "0.5.0";
+var build_time = "01.03.2025, 20:53:10";
 model_default.info = () => {
   console.info(`%c Model %c v${version} %c ${build_time} `, "color: white; font-weight: bold; background: #0080fe", "color: white; background: darkgreen", "color: white; background: #0080fe;");
 };

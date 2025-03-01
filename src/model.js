@@ -14,7 +14,7 @@ class Model extends EventEmitter {
     }
     
     constructor(data = {}, options = {}) {
-        Model.log('Ініціалізація Model з даними:', data);
+        Model.log('Model initialization with data:', data);
 
         super();
         
@@ -45,29 +45,29 @@ class Model extends EventEmitter {
 
     // Парсимо DOM для пошуку циклів
     parseLoops(rootElement) {
-        Model.log('Шукаємо елементи з data-for');
+        Model.log('Looking for items with data-for');
         const loopElements = rootElement.querySelectorAll('[data-for]');
-        Model.log('Знайдено елементів з data-for:', loopElements.length);
+        Model.log('Found items from data-for:', loopElements.length);
 
         loopElements.forEach((element, index) => {
             const expression = element.getAttribute('data-for').trim();
-            Model.log(`Обробка елементу ${index}:`, expression);
+            Model.log(`Element processing ${index}:`, expression);
 
             const matches = expression.match(/^\s*(\w+)(?:\s*,\s*(\w+))?\s+in\s+(\w+(?:\.\w+)*)\s*$/);
 
             if (!matches) {
-                console.error('Неправильний формат виразу data-for:', expression);
+                console.error('Incorrect format of expression data-for:', expression);
                 return;
             }
 
             const [_, itemName, indexName, arrayPath] = matches;
-            Model.log('Розібрано вираз:', {itemName, indexName, arrayPath});
+            Model.log('The expression is dismantled:', {itemName, indexName, arrayPath});
 
             const array = this.getValueByPath(arrayPath);
-            Model.log('Отримано масив:', array);
+            Model.log('An array was obtained:', array);
 
             if (!Array.isArray(array)) {
-                console.error(`Значення за шляхом ${arrayPath} не є масивом:`, array);
+                console.error(`The value in the way ${arrayPath} is not an array:`, array);
                 return;
             }
 
@@ -81,7 +81,7 @@ class Model extends EventEmitter {
                 parentNode: element.parentNode
             });
 
-            Model.log('Оновлюємо цикл для елементу');
+            Model.log('Update the cycle for the item');
             this.updateLoop(element);
         });
     }
@@ -90,17 +90,17 @@ class Model extends EventEmitter {
     updateLoop(element) {
         const loopInfo = this.loops.get(element);
         if (!loopInfo) {
-            console.error('Не знайдено інформацію про цикл для елементу');
+            console.error('No cycle information found for an item');
             return;
         }
 
         const {template, itemName, indexName, arrayPath, parentNode} = loopInfo;
         const array = this.getValueByPath(arrayPath);
 
-        Model.log('Оновлення циклу для масиву:', array);
+        Model.log('Update cycle for array:', array);
 
         if (!Array.isArray(array)) {
-            console.error('Значення не є масивом:', array);
+            console.error('The value is not an array:', array);
             return;
         }
 
@@ -136,7 +136,7 @@ class Model extends EventEmitter {
             const newText = node.textContent.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
                 path = path.trim();
                 const value = context && path in context ? context[path] : this.getValueByPath(path);
-                Model.log('Заміна в шаблоні:', {original: match, path, value});
+                Model.log('Replacement in the template:', {original: match, path, value});
                 return value;
             });
             if (originalText !== newText) {
@@ -479,12 +479,12 @@ class Model extends EventEmitter {
         const parts = path.split('.');
         for (const part of parts) {
             if (value === undefined || value === null) {
-                console.error(`Шлях ${path} обірвався на ${part}`);
+                console.error(`The way ${path} broke off on ${part}`);
                 return undefined;
             }
             value = value[part];
         }
-        Model.log('Отримане значення:', value);
+        Model.log('The value received:', value);
         return value;
     }
 
@@ -506,13 +506,13 @@ class Model extends EventEmitter {
 
     // Парсимо DOM для пошуку умовних виразів
     parseConditionals(rootElement) {
-        Model.log('Шукаємо елементи з data-if');
+        Model.log('Looking for items with data-if');
         const conditionalElements = rootElement.querySelectorAll('[data-if]');
-        Model.log('Знайдено елементів з data-if:', conditionalElements.length);
+        Model.log('Found items from data-if:', conditionalElements.length);
 
         conditionalElements.forEach((element) => {
             const expression = element.getAttribute('data-if').trim();
-            Model.log('Обробка умовного виразу:', expression);
+            Model.log('Processing of conditional expression:', expression);
 
             // Зберігаємо original display value
             const originalDisplay = element.style.display;
@@ -526,9 +526,9 @@ class Model extends EventEmitter {
                     const result = this.evaluateExpression(expression, context);
 
                     element.style.display = result ? originalDisplay || '' : 'none';
-                    Model.log(`Результат виразу ${expression}:`, result);
+                    Model.log(`The result of the expression ${expression}:`, result);
                 } catch (error) {
-                    console.error('Помилка при обробці data-if:', error);
+                    console.error('Error in processing data-if:', error);
                 }
             };
 
@@ -557,7 +557,7 @@ class Model extends EventEmitter {
             const func = new Function(...Object.keys(context), `return ${expression}`);
             return func(...Object.values(context));
         } catch (error) {
-            console.error('Помилка при оцінці виразу:', error);
+            console.error('Error when evaluating expression:', error);
             return false;
         }
     }
