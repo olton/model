@@ -400,17 +400,19 @@ class Model {
         });
     }
 
+    setInputValue(input, value) {
+        if (input.type === 'checkbox' || input.type === 'radio') {
+            input.checked = Boolean(value);
+        } else {
+            input.value = value;
+        }
+    }
+    
     // Оновлення значень в input-елементах при зміні даних моделі
     updateInputs(propName, value) {
         this.inputs.forEach(item => {
             if (item.property === propName) {
-                const input = item.element;
-
-                if (input.type === 'checkbox' || input.type === 'radio') {
-                    input.checked = Boolean(value);
-                } else if (input.value !== String(value)) {
-                    input.value = value;
-                }
+                this.setInputValue(item.element, value);
             }
         });
     }
@@ -430,13 +432,7 @@ class Model {
         // Оновлюємо всі інпути
         this.inputs.forEach(item => {
             const value = this.getValueByPath(item.property);
-            const input = item.element;
-
-            if (input.type === 'checkbox' || input.type === 'radio') {
-                input.checked = Boolean(value);
-            } else if (input.value !== String(value)) {
-                input.value = value;
-            }
+            this.setInputValue(item.element, value);
         });
     }
 
