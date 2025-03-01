@@ -20,6 +20,10 @@
     <div>
         <input type="text" data-model="user.name">
     </div>
+
+    <ul>
+        <li data-for="item in user.items">{{ item }}</li>
+    </ul>
     
     <div>Counter: {{ counter }}</div>
     <div><input class="text-center" type="text" data-model="counter"></div>
@@ -56,7 +60,8 @@
             address: {
                 city: 'Київ',
                 street: 'Хрещатик'
-            }
+            },
+            items: ['Перший', 'Другий', 'Третій'],
         },
         // Computed властивість, що використовує вкладені дані
         fullAddress() {
