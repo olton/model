@@ -38,8 +38,6 @@ const options = {
 const drop = []
 
 if (production) {
-    drop.push("console")
-    
     await build({
         ...options,
         drop,

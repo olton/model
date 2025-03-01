@@ -1,24 +1,82 @@
 
 /*!
- * Model v0.3.0
- * Build: 01.03.2025, 19:49:19
+ * Model v0.4.0
+ * Build: 01.03.2025, 20:34:54
  * Copyright 2012-2025 by Serhii Pimenov
  * Licensed under MIT
  */
 
 
+// src/event-emmiter.js
+var EventEmitter = class {
+  constructor() {
+    this.events = /* @__PURE__ */ new Map();
+  }
+  on(eventName, callback) {
+    if (!this.events.has(eventName)) {
+      this.events.set(eventName, /* @__PURE__ */ new Set());
+    }
+    this.events.get(eventName).add(callback);
+    return () => this.off(eventName, callback);
+  }
+  off(eventName, callback) {
+    if (this.events.has(eventName)) {
+      this.events.get(eventName).delete(callback);
+    }
+  }
+  emit(eventName, data) {
+    if (this.events.has(eventName)) {
+      this.events.get(eventName).forEach((callback) => {
+        try {
+          callback(data);
+        } catch (e) {
+          console.error(`Error when performing an event handler ${eventName}:`, e);
+        }
+      });
+    }
+  }
+};
+var event_emmiter_default = EventEmitter;
+
+// src/middleware.js
+var MiddlewareManager = class {
+  constructor() {
+    this.middlewares = [];
+  }
+  use(middleware) {
+    if (typeof middleware !== "function") {
+      throw new Error("MIDDLEWARE should be a function!");
+    }
+    this.middlewares.push(middleware);
+  }
+  async process(context) {
+    let index = -1;
+    const next = async () => {
+      index++;
+      if (index < this.middlewares.length) {
+        await this.middlewares[index](context, next);
+      }
+    };
+    await next();
+    return context;
+  }
+};
+var middleware_default = MiddlewareManager;
+
 // src/model.js
 var ModelOptions = {
   id: "model"
 };
-var Model = class _Model {
+var Model = class _Model extends event_emmiter_default {
   static DEBUG = false;
   static log = (...args) => {
     if (_Model.DEBUG) {
+      console.log(...args);
     }
   };
   constructor(data = {}, options = {}) {
     _Model.log("\u0406\u043D\u0456\u0446\u0456\u0430\u043B\u0456\u0437\u0430\u0446\u0456\u044F Model \u0437 \u0434\u0430\u043D\u0438\u043C\u0438:", data);
+    super();
     this.options = Object.assign({}, ModelOptions, options);
     this.elements = [];
     this.inputs = [];
@@ -26,6 +84,8 @@ var Model = class _Model {
     this.watchers = /* @__PURE__ */ new Map();
     this.batchUpdate = false;
     this.loops = /* @__PURE__ */ new Map();
+    this.events = /* @__PURE__ */ new Map();
+    this.middleware = new middleware_default();
     for (const key in data) {
       if (typeof data[key] === "function") {
         this.computed[key] = {
@@ -39,15 +99,17 @@ var Model = class _Model {
     }
     this.data = this.createReactiveProxy(data);
   }
+  // Парсимо DOM для пошуку циклів
   parseLoops(rootElement) {
-    _Model.log("\u0428\u0443\u043A\u0430\u0454\u043C\u043E \u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0438 \u0437 m-for");
-    const loopElements = rootElement.querySelectorAll("[m-for]");
-    _Model.log("\u0417\u043D\u0430\u0439\u0434\u0435\u043D\u043E \u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0456\u0432 \u0437 m-for:", loopElements.length);
+    _Model.log("\u0428\u0443\u043A\u0430\u0454\u043C\u043E \u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0438 \u0437 data-for");
+    const loopElements = rootElement.querySelectorAll("[data-for]");
+    _Model.log("\u0417\u043D\u0430\u0439\u0434\u0435\u043D\u043E \u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0456\u0432 \u0437 data-for:", loopElements.length);
     loopElements.forEach((element, index) => {
-      const expression = element.getAttribute("m-for").trim();
+      const expression = element.getAttribute("data-for").trim();
       _Model.log(`\u041E\u0431\u0440\u043E\u0431\u043A\u0430 \u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0443 ${index}:`, expression);
       const matches = expression.match(/^\s*(\w+)(?:\s*,\s*(\w+))?\s+in\s+(\w+(?:\.\w+)*)\s*$/);
       if (!matches) {
+        console.error("\u041D\u0435\u043F\u0440\u0430\u0432\u0438\u043B\u044C\u043D\u0438\u0439 \u0444\u043E\u0440\u043C\u0430\u0442 \u0432\u0438\u0440\u0430\u0437\u0443 data-for:", expression);
         return;
       }
       const [_, itemName, indexName, arrayPath] = matches;
@@ -55,6 +117,7 @@ var Model = class _Model {
       const array = this.getValueByPath(arrayPath);
       _Model.log("\u041E\u0442\u0440\u0438\u043C\u0430\u043D\u043E \u043C\u0430\u0441\u0438\u0432:", array);
       if (!Array.isArray(array)) {
+        console.error(`\u0417\u043D\u0430\u0447\u0435\u043D\u043D\u044F \u0437\u0430 \u0448\u043B\u044F\u0445\u043E\u043C ${arrayPath} \u043D\u0435 \u0454 \u043C\u0430\u0441\u0438\u0432\u043E\u043C:`, array);
         return;
       }
       const template = element.cloneNode(true);
@@ -69,15 +132,18 @@ var Model = class _Model {
       this.updateLoop(element);
     });
   }
+  // Оновлюємо цикл
   updateLoop(element) {
     const loopInfo = this.loops.get(element);
     if (!loopInfo) {
+      console.error("\u041D\u0435 \u0437\u043D\u0430\u0439\u0434\u0435\u043D\u043E \u0456\u043D\u0444\u043E\u0440\u043C\u0430\u0446\u0456\u044E \u043F\u0440\u043E \u0446\u0438\u043A\u043B \u0434\u043B\u044F \u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0443");
       return;
     }
     const { template, itemName, indexName, arrayPath, parentNode } = loopInfo;
     const array = this.getValueByPath(arrayPath);
     _Model.log("\u041E\u043D\u043E\u0432\u043B\u0435\u043D\u043D\u044F \u0446\u0438\u043A\u043B\u0443 \u0434\u043B\u044F \u043C\u0430\u0441\u0438\u0432\u0443:", array);
     if (!Array.isArray(array)) {
+      console.error("\u0417\u043D\u0430\u0447\u0435\u043D\u043D\u044F \u043D\u0435 \u0454 \u043C\u0430\u0441\u0438\u0432\u043E\u043C:", array);
       return;
     }
     const generated = parentNode.querySelectorAll(`[data-generated-for="${arrayPath}"]`);
@@ -85,7 +151,7 @@ var Model = class _Model {
     array.forEach((item, index) => {
       const newNode = template.cloneNode(true);
       newNode.style.display = "";
-      newNode.removeAttribute("m-for");
+      newNode.removeAttribute("data-for");
       newNode.setAttribute("data-generated-for", arrayPath);
       this.processTemplateNode(newNode, {
         [itemName]: item,
@@ -95,6 +161,7 @@ var Model = class _Model {
     });
     element.style.display = "none";
   }
+  // Обробка шаблонних вузлів
   processTemplateNode(node, context) {
     if (node.nodeType === Node.TEXT_NODE) {
       const originalText = node.textContent;
@@ -113,23 +180,7 @@ var Model = class _Model {
       });
     }
   }
-  // bindLoopEvents(node, item, index) {
-  //     const clickHandler = node.getAttribute('m-on:click');
-  //     if (clickHandler) {
-  //         node.addEventListener('click', (event) => {
-  //             // Створюємо контекст для обробника
-  //             const context = {
-  //                 item,
-  //                 index,
-  //                 event,
-  //                 target: event.target
-  //             };
-  //
-  //             // Виконуємо обробник у контексті моделі
-  //             this.executeHandler(clickHandler, context);
-  //         });
-  //     }
-  // }
+  // Пакетне оновлення
   batch(callback) {
     this.batchUpdate = true;
     callback();
@@ -186,7 +237,7 @@ var Model = class _Model {
       return this.createArrayProxy(obj, path);
     }
     return new Proxy(obj, {
-      set: (target, property, value) => {
+      set: async (target, property, value) => {
         if (typeof property === "symbol") {
           target[property] = value;
           return true;
@@ -205,7 +256,22 @@ var Model = class _Model {
           );
         }
         const oldValue = target[property];
-        target[property] = value;
+        const context = {
+          property,
+          oldValue,
+          newValue: value,
+          preventDefault: false
+        };
+        await this.middleware.process(context);
+        if (context.preventDefault) {
+          return true;
+        }
+        target[property] = context.newValue;
+        this.emit("change", {
+          property,
+          oldValue,
+          newValue: context.newValue
+        });
         const fullPath = path ? `${path}.${property}` : property;
         if (this.watchers.has(fullPath)) {
           this.watchers.get(fullPath).forEach(
@@ -314,16 +380,18 @@ var Model = class _Model {
       });
     });
   }
+  setInputValue(input, value) {
+    if (input.type === "checkbox" || input.type === "radio") {
+      input.checked = Boolean(value);
+    } else {
+      input.value = value;
+    }
+  }
   // Оновлення значень в input-елементах при зміні даних моделі
   updateInputs(propName, value) {
     this.inputs.forEach((item) => {
       if (item.property === propName) {
-        const input = item.element;
-        if (input.type === "checkbox" || input.type === "radio") {
-          input.checked = Boolean(value);
-        } else if (input.value !== String(value)) {
-          input.value = value;
-        }
+        this.setInputValue(item.element, value);
       }
     });
   }
@@ -339,12 +407,7 @@ var Model = class _Model {
     });
     this.inputs.forEach((item) => {
       const value = this.getValueByPath(item.property);
-      const input = item.element;
-      if (input.type === "checkbox" || input.type === "radio") {
-        input.checked = Boolean(value);
-      } else if (input.value !== String(value)) {
-        input.value = value;
-      }
+      this.setInputValue(item.element, value);
     });
   }
   // Оновлюємо метод updateDOM для підтримки вкладених шляхів
@@ -369,6 +432,7 @@ var Model = class _Model {
     const parts = path.split(".");
     for (const part of parts) {
       if (value === void 0 || value === null) {
+        console.error(`\u0428\u043B\u044F\u0445 ${path} \u043E\u0431\u0456\u0440\u0432\u0430\u0432\u0441\u044F \u043D\u0430 ${part}`);
         return void 0;
       }
       value = value[part];
@@ -392,11 +456,11 @@ var Model = class _Model {
   }
   // Парсимо DOM для пошуку умовних виразів
   parseConditionals(rootElement) {
-    _Model.log("\u0428\u0443\u043A\u0430\u0454\u043C\u043E \u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0438 \u0437 m-if");
-    const conditionalElements = rootElement.querySelectorAll("[m-if]");
-    _Model.log("\u0417\u043D\u0430\u0439\u0434\u0435\u043D\u043E \u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0456\u0432 \u0437 m-if:", conditionalElements.length);
+    _Model.log("\u0428\u0443\u043A\u0430\u0454\u043C\u043E \u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0438 \u0437 data-if");
+    const conditionalElements = rootElement.querySelectorAll("[data-if]");
+    _Model.log("\u0417\u043D\u0430\u0439\u0434\u0435\u043D\u043E \u0435\u043B\u0435\u043C\u0435\u043D\u0442\u0456\u0432 \u0437 data-if:", conditionalElements.length);
     conditionalElements.forEach((element) => {
-      const expression = element.getAttribute("m-if").trim();
+      const expression = element.getAttribute("data-if").trim();
       _Model.log("\u041E\u0431\u0440\u043E\u0431\u043A\u0430 \u0443\u043C\u043E\u0432\u043D\u043E\u0433\u043E \u0432\u0438\u0440\u0430\u0437\u0443:", expression);
       const originalDisplay = element.style.display;
       const updateVisibility = () => {
@@ -406,6 +470,7 @@ var Model = class _Model {
           element.style.display = result ? originalDisplay || "" : "none";
           _Model.log(`\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0432\u0438\u0440\u0430\u0437\u0443 ${expression}:`, result);
         } catch (error) {
+          console.error("\u041F\u043E\u043C\u0438\u043B\u043A\u0430 \u043F\u0440\u0438 \u043E\u0431\u0440\u043E\u0431\u0446\u0456 data-if:", error);
         }
       };
       const variables = this.extractVariables(expression);
@@ -426,6 +491,7 @@ var Model = class _Model {
       const func = new Function(...Object.keys(context), `return ${expression}`);
       return func(...Object.values(context));
     } catch (error) {
+      console.error("\u041F\u043E\u043C\u0438\u043B\u043A\u0430 \u043F\u0440\u0438 \u043E\u0446\u0456\u043D\u0446\u0456 \u0432\u0438\u0440\u0430\u0437\u0443:", error);
       return false;
     }
   }
@@ -433,6 +499,7 @@ var Model = class _Model {
   init(selector) {
     const rootElement = typeof selector === "string" ? document.querySelector(selector) : selector;
     if (!rootElement) {
+      console.error("The root element was not found!");
       return;
     }
     this.parseLoops(rootElement);
@@ -445,7 +512,10 @@ var Model = class _Model {
 var model_default = Model;
 
 // src/index.js
+var version = "0.4.0";
+var build_time = "01.03.2025, 20:34:54";
 model_default.info = () => {
+  console.info(`%c Model %c v${version} %c ${build_time} `, "color: white; font-weight: bold; background: #0080fe", "color: white; background: darkgreen", "color: white; background: #0080fe;");
 };
 var index_default = model_default;
 export {

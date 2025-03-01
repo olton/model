@@ -45,18 +45,18 @@ class Model extends EventEmitter {
 
     // Парсимо DOM для пошуку циклів
     parseLoops(rootElement) {
-        Model.log('Шукаємо елементи з m-for');
-        const loopElements = rootElement.querySelectorAll('[m-for]');
-        Model.log('Знайдено елементів з m-for:', loopElements.length);
+        Model.log('Шукаємо елементи з data-for');
+        const loopElements = rootElement.querySelectorAll('[data-for]');
+        Model.log('Знайдено елементів з data-for:', loopElements.length);
 
         loopElements.forEach((element, index) => {
-            const expression = element.getAttribute('m-for').trim();
+            const expression = element.getAttribute('data-for').trim();
             Model.log(`Обробка елементу ${index}:`, expression);
 
             const matches = expression.match(/^\s*(\w+)(?:\s*,\s*(\w+))?\s+in\s+(\w+(?:\.\w+)*)\s*$/);
 
             if (!matches) {
-                console.error('Неправильний формат виразу m-for:', expression);
+                console.error('Неправильний формат виразу data-for:', expression);
                 return;
             }
 
@@ -112,7 +112,7 @@ class Model extends EventEmitter {
         array.forEach((item, index) => {
             const newNode = template.cloneNode(true);
             newNode.style.display = '';
-            newNode.removeAttribute('m-for');
+            newNode.removeAttribute('data-for');
             newNode.setAttribute('data-generated-for', arrayPath);
 
             // Замінюємо змінні в шаблоні
@@ -506,12 +506,12 @@ class Model extends EventEmitter {
 
     // Парсимо DOM для пошуку умовних виразів
     parseConditionals(rootElement) {
-        Model.log('Шукаємо елементи з m-if');
-        const conditionalElements = rootElement.querySelectorAll('[m-if]');
-        Model.log('Знайдено елементів з m-if:', conditionalElements.length);
+        Model.log('Шукаємо елементи з data-if');
+        const conditionalElements = rootElement.querySelectorAll('[data-if]');
+        Model.log('Знайдено елементів з data-if:', conditionalElements.length);
 
         conditionalElements.forEach((element) => {
-            const expression = element.getAttribute('m-if').trim();
+            const expression = element.getAttribute('data-if').trim();
             Model.log('Обробка умовного виразу:', expression);
 
             // Зберігаємо original display value
@@ -528,7 +528,7 @@ class Model extends EventEmitter {
                     element.style.display = result ? originalDisplay || '' : 'none';
                     Model.log(`Результат виразу ${expression}:`, result);
                 } catch (error) {
-                    console.error('Помилка при обробці m-if:', error);
+                    console.error('Помилка при обробці data-if:', error);
                 }
             };
 
