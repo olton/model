@@ -7,6 +7,16 @@
 <body>
 <div>
 <h1>Counter</h1>
+    <div>
+        <p>Ім'я: {{ user.name }}
+        <p>Місто: {{ user.address.city }}
+        <p>Повна адреса: {{ fullAddress }}
+    </div>
+
+    <div>
+        <input type="text" data-model="user.name">
+    </div>
+    
     <div>Counter: {{ counter }}</div>
     <div><input class="text-center" type="text" data-model="counter"></div>
     <div>Статус: {{ status }}</div>
@@ -17,11 +27,22 @@
 </div>
 <script type="module">
     import Model from "../src/index.js";
-    var app = new Model({
-        counter: 0,
+    const app = new Model({
+        counter: 10,
         status: function () {
             return this.counter === 0 ? "Zero" : this.counter > 0 ? "Positive" : "Negative";
-        }
+        },
+        user: {
+            name: 'Іван',
+            address: {
+                city: 'Київ',
+                street: 'Хрещатик'
+            }
+        },
+        // Computed властивість, що використовує вкладені дані
+        fullAddress() {
+            return `${this.user.address.city}, ${this.user.address.street}`;
+        },
     })
 
     app.init()
@@ -29,6 +50,35 @@
     globalThis.updateCounter = (operator) => {
         operator === "-" ? app.data.counter-- : app.data.counter++
     }
+
+    // Валідація
+    // app.addValidator('username', value => value.length >= 3);
+
+    // Форматування
+    // app.addFormatter('username', value => value.trim());
+
+    // Спостерігач
+    app.watch('counter', (newValue, oldValue) => {
+        console.log(`Counter змінився з ${oldValue} на ${newValue}`);
+    });
+
+    // Групове оновлення
+    // app.batch(() => {
+    //     app.data.counter = 10;
+    //     app.data.username = 'John';
+    // });
+
+    // Збереження стану
+    // window.addEventListener('beforeunload', () => {
+    //     app.saveState();
+    // });
+
+    // Відновлення стану при завантаженні
+    // document.addEventListener('DOMContentLoaded', () => {
+    //     app.loadState();
+    //     app.init();
+    // });
+
 </script>
 </body>
 </html>
