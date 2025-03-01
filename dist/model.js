@@ -1,7 +1,7 @@
 
 /*!
- * Model v0.7.0
- * Build: 02.03.2025, 01:25:15
+ * Model v0.8.0
+ * Build: 02.03.2025, 01:25:42
  * Copyright 2012-2025 by Serhii Pimenov
  * Licensed under MIT
  */
@@ -980,8 +980,8 @@ var Model = class _Model extends event_emmiter_default {
 var model_default = Model;
 
 // src/index.js
-var version = "0.7.0";
-var build_time = "02.03.2025, 01:25:15";
+var version = "0.8.0";
+var build_time = "02.03.2025, 01:25:42";
 model_default.info = () => {
   console.info(`%c Model %c v${version} %c ${build_time} `, "color: white; font-weight: bold; background: #0080fe", "color: white; background: darkgreen", "color: white; background: #0080fe;");
 };
