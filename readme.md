@@ -1,9 +1,15 @@
-# Model – Is a reactive data model for two-way data binding
+<div align="center">
 
+# Model
+
+Model – Is a reactive data model for two-way data binding
+
+</div>
 
 ![Alt](https://repobeats.axiom.co/api/embed/f9fb207d1b8878c829433a10ad16e86ca9c59d4e.svg "Repobeats analytics image")
 
-#### Status
+<div align="center">
+
 ![Dependencies](https://img.shields.io/badge/Dependencies-none-darklime.svg)
 ![Package Version](https://img.shields.io/github/package-json/v/olton/model)
 ![GitHub Release](https://img.shields.io/github/v/release/olton/model)
@@ -12,6 +18,7 @@
 ![Code size](https://img.shields.io/github/languages/code-size/olton/model.svg?color=830000)
 ![GitHub JS Size](https://img.shields.io/github/size/olton/model/dist%2Fmodel.js?label=JS%20Size&color=8f99ff)
 
+</div>
 
 ## Documentation
 
