@@ -1,5 +1,5 @@
 import Model from "../src/index.js";
-// Model.DEBUG = true;
+Model.DEBUG_LEVEL = Model.DEBUG_LEVELS.ERROR;
 Model.info()
 const app = new Model({
     counter: 0,

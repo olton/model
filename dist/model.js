@@ -1,7 +1,7 @@
 
 /*!
  * Model v0.11.0
- * Build: 02.03.2025, 19:49:45
+ * Build: 02.03.2025, 20:45:54
  * Copyright 2012-2025 by Serhii Pimenov
  * Licensed under MIT
  */
@@ -461,17 +461,79 @@ var dev_tools_default = ModelDevTools;
 
 // src/model.js
 var ModelOptions = {
-  id: "model"
+  id: "model",
+  memoizeComputed: true
 };
 var Model = class _Model extends event_emmiter_default {
-  static DEBUG = false;
-  static log = (...args) => {
-    if (_Model.DEBUG) {
-      console.log(...args);
-    }
+  static DEBUG_LEVELS = {
+    NONE: 0,
+    ERROR: 1,
+    WARN: 2,
+    INFO: 3,
+    DEBUG: 4,
+    TRACE: 5
   };
+  static DEBUG_LEVEL = _Model.DEBUG_LEVELS.NONE;
+  static log(level, message, data) {
+    if (level > _Model.DEBUG_LEVEL) return;
+    const styles = {
+      error: "color: #ff5555; font-weight: bold",
+      warn: "color: #ffaa00; font-weight: bold",
+      info: "color: #0080fe; font-weight: bold",
+      debug: "color: #00aa00; font-weight: bold",
+      trace: "color: #888888",
+      data: "color: #555; font-style: italic"
+    };
+    let styleType;
+    let method;
+    switch (level) {
+      case _Model.DEBUG_LEVELS.ERROR:
+        styleType = "error";
+        method = console.error;
+        break;
+      case _Model.DEBUG_LEVELS.WARN:
+        styleType = "warn";
+        method = console.warn;
+        break;
+      case _Model.DEBUG_LEVELS.INFO:
+        styleType = "info";
+        method = console.info;
+        break;
+      case _Model.DEBUG_LEVELS.DEBUG:
+        styleType = "debug";
+        method = console.debug;
+        break;
+      case _Model.DEBUG_LEVELS.TRACE:
+        styleType = "trace";
+        method = console.log;
+        break;
+      default:
+        return;
+    }
+    console.group(`%c Model: ${message}`, styles[styleType]);
+    if (data !== void 0) {
+      console.log("%c Data:", styles.data, data);
+    }
+    console.groupEnd();
+  }
+  // Методы для удобства
+  static error(message, data) {
+    _Model.log(_Model.DEBUG_LEVELS.ERROR, message, data);
+  }
+  static warn(message, data) {
+    _Model.log(_Model.DEBUG_LEVELS.WARN, message, data);
+  }
+  static info(message, data) {
+    _Model.log(_Model.DEBUG_LEVELS.INFO, message, data);
+  }
+  static debug(message, data) {
+    _Model.log(_Model.DEBUG_LEVELS.DEBUG, message, data);
+  }
+  static trace(message, data) {
+    _Model.log(_Model.DEBUG_LEVELS.TRACE, message, data);
+  }
   constructor(data = {}, options = {}) {
-    _Model.log("Model initialization with data:", data);
+    _Model.debug("Model initialization with data:", data);
     super();
     this.options = Object.assign({}, ModelOptions, options);
     this.elements = [];
@@ -510,23 +572,23 @@ var Model = class _Model extends event_emmiter_default {
   }
   // Парсимо DOM для пошуку циклів
   parseLoops(rootElement) {
-    _Model.log("Looking for items with data-for");
+    _Model.debug("Looking for items with data-for...");
     const loopElements = rootElement.querySelectorAll("[data-for]");
-    _Model.log("Found items from data-for:", loopElements.length);
+    _Model.debug("Found items from data-for:", loopElements.length);
     loopElements.forEach((element, index) => {
       const expression = element.getAttribute("data-for").trim();
-      _Model.log(`Element processing ${index}:`, expression);
+      _Model.debug(`Element processing ${index}:`, expression);
       const matches = expression.match(/^\s*(\w+)(?:\s*,\s*(\w+))?\s+in\s+(\w+(?:\.\w+)*)\s*$/);
       if (!matches) {
         console.error("Incorrect format of expression data-for:", expression);
         return;
       }
       const [_, itemName, indexName, arrayPath] = matches;
-      _Model.log("The expression is dismantled:", { itemName, indexName, arrayPath });
+      _Model.debug("The expression is dismantled:", { itemName, indexName, arrayPath });
       const array = this.getValueByPath(arrayPath);
-      _Model.log("An array was obtained:", array);
+      _Model.debug("An array was obtained:", array);
       if (!Array.isArray(array)) {
-        console.error(`The value in the way ${arrayPath} is not an array:`, array);
+        _Model.error(`The value in the way ${arrayPath} is not an array:`, array);
         return;
       }
       const template = element.cloneNode(true);
@@ -537,7 +599,7 @@ var Model = class _Model extends event_emmiter_default {
         arrayPath,
         parentNode: element.parentNode
       });
-      _Model.log("Update the loop for the item");
+      _Model.debug("Update the loop for the item");
       this.updateLoop(element);
     });
   }
@@ -545,14 +607,14 @@ var Model = class _Model extends event_emmiter_default {
   updateLoop(element) {
     const loopInfo = this.loops.get(element);
     if (!loopInfo) {
-      console.error("No loop information found for an item");
+      _Model.error("No loop information found for an item");
       return;
     }
     const { template, itemName, indexName, arrayPath, parentNode } = loopInfo;
     const array = this.getValueByPath(arrayPath);
-    _Model.log("Update loop for array:", array);
+    _Model.debug("Update loop for array:", array);
     if (!Array.isArray(array)) {
-      console.error("The value is not an array:", array);
+      _Model.error("The value is not an array:", array);
       return;
     }
     const generated = parentNode.querySelectorAll(`[data-generated-for="${arrayPath}"]`);
@@ -577,7 +639,7 @@ var Model = class _Model extends event_emmiter_default {
       const newText = node.textContent.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
         path = path.trim();
         const value = context && path in context ? context[path] : this.getValueByPath(path);
-        _Model.log("Replacement in the template:", { original: match, path, value });
+        _Model.debug("Replacement in the template:", { original: match, path, value });
         return value;
       });
       if (originalText !== newText) {
@@ -608,7 +670,7 @@ var Model = class _Model extends event_emmiter_default {
   }
   // Метод для встановлення значення за шляхом
   setValueByPath(path, value) {
-    _Model.log("Setting value by path:", { path, value });
+    _Model.debug("Setting value by path:", { path, value });
     const parts = path.split(".");
     let current = this.data;
     for (let i = 0; i < parts.length - 1; i++) {
@@ -621,18 +683,18 @@ var Model = class _Model extends event_emmiter_default {
   }
   // Метод для отримання значення за шляхом
   getValueByPath(path) {
-    _Model.log("\u041E\u0442\u0440\u0438\u043C\u0430\u043D\u043D\u044F \u0437\u043D\u0430\u0447\u0435\u043D\u043D\u044F \u0437\u0430 \u0448\u043B\u044F\u0445\u043E\u043C:", path);
+    _Model.debug("Obtaining value by way:", path);
     let value = this.data;
     if (!path) return value;
     const parts = path.split(".");
     for (const part of parts) {
       if (value === void 0 || value === null) {
-        console.error(`The way ${path} broke off on ${part}`);
+        _Model.error(`The way ${path} broke off on ${part}`);
         return void 0;
       }
       value = value[part];
     }
-    _Model.log("The value received:", value);
+    _Model.debug("The value received:", value);
     return value;
   }
   // Додаємо спостерігачів (watchers)
@@ -656,15 +718,19 @@ var Model = class _Model extends event_emmiter_default {
     }
     this.formatters.set(propertyPath, formatter);
   }
+  // Додаємо middleware
+  use(middleware) {
+    this.middleware.use(middleware);
+  }
   // Створення реактивного проксі для масиву
   createArrayProxy(array, path = "") {
     return new Proxy(array, {
       get: (target, property) => {
-        _Model.log("ArrayProxy get:", { path, property });
+        _Model.debug("ArrayProxy get:", { path, property });
         return target[property];
       },
       set: (target, property, value) => {
-        _Model.log("ArrayProxy set:", { path, property, value });
+        _Model.debug("ArrayProxy set:", { path, property, value });
         if (typeof property === "symbol") {
           target[property] = value;
           return true;
@@ -753,7 +819,7 @@ var Model = class _Model extends event_emmiter_default {
     });
   }
   // Обчислення значення computed властивості
-  evaluateComputed(key) {
+  evaluateComputed(key, force = false) {
     const computed = this.computed[key];
     const dependencies = /* @__PURE__ */ new Set();
     const dataTracker = new Proxy(this.data, {
@@ -824,18 +890,15 @@ var Model = class _Model extends event_emmiter_default {
     const inputs = root.querySelectorAll("[data-model]");
     inputs.forEach((input) => {
       const property = input.getAttribute("data-model");
+      const handler = (e) => {
+        const value = input.type === "checkbox" || input.type === "radio" ? e.target.checked : e.target.value;
+        this.setValueByPath(property, value);
+      };
+      input.__modelInputHandler = handler;
+      input.addEventListener("input", handler);
       this.inputs.push({
         element: input,
         property
-      });
-      input.addEventListener("input", (e) => {
-        const value = e.target.value;
-        const path = property.split(".");
-        let current = this.data;
-        for (let i = 0; i < path.length - 1; i++) {
-          current = current[path[i]];
-        }
-        current[path[path.length - 1]] = value;
       });
     });
   }
@@ -872,24 +935,20 @@ var Model = class _Model extends event_emmiter_default {
   }
   // Оновлення DOM при зміні даних
   updateDOM(propertyPath, value) {
-    if (this.domDependencies.has(propertyPath)) {
-      this.domDependencies.get(propertyPath).forEach((dep) => {
-        if (dep.type === "template") {
-          this.updateTemplateNode(dep.element, dep.template);
-        } else if (dep.type === "conditional") {
-          this.updateConditional(dep.element, dep.expression);
-        } else if (dep.type === "loop") {
-          this.updateLoopPart(dep.element, dep.arrayPath, value, dep.index);
-        }
-      });
-      return;
-    }
-    this.elements.forEach((element) => {
-      const isAffected = element.propName === propertyPath || element.propName.startsWith(propertyPath + ".") || propertyPath.startsWith(element.propName + ".");
-      if (isAffected) {
-        this.updateTemplateNode(element.node, element.template);
-      }
+    if (!this.domDependencies.has(propertyPath)) return;
+    const affectedElements = this.domDependencies.get(propertyPath);
+    if (affectedElements.size === 0) return;
+    const updates = {
+      template: [],
+      conditional: [],
+      loop: []
+    };
+    affectedElements.forEach((dep) => {
+      updates[dep.type].push(dep);
     });
+    updates.template.forEach((dep) => this.updateTemplateNode(dep.element, dep.template));
+    updates.conditional.forEach((dep) => this.updateConditional(dep.element, dep.expression));
+    updates.loop.forEach((dep) => this.updateLoopPart(dep.element, dep.arrayPath, value, dep.index));
   }
   // Парсимо DOM для пошуку умовних виразів
   parseConditionals(rootElement) {
@@ -959,21 +1018,49 @@ var Model = class _Model extends event_emmiter_default {
       this.virtualDom.set(node, newContent);
     }
   }
+  // Допоміжний метод перевірки доступності localStorage
+  static isStorageAvailable() {
+    try {
+      const test = "__test__";
+      localStorage.setItem(test, test);
+      localStorage.removeItem(test);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
   // Збереження стану
   saveState() {
+    if (!_Model.isStorageAvailable()) {
+      console.warn("localStorage is not available");
+      this.emit("saveStateError", { error: new Error("localStorage is not available") });
+      return null;
+    }
+    const dataToSave = JSON.parse(JSON.stringify(this.data));
     const state = {
-      data: this.data,
+      data: dataToSave,
       computed: Object.fromEntries(
         Object.entries(this.computed).map(([key, comp]) => [key, comp.value])
-      )
+      ),
+      timestamp: Date.now()
     };
-    localStorage.setItem(this.options.id, JSON.stringify(state));
-    _Model.log("State saved:", state);
-    this.emit("saveState", state);
-    return state;
+    try {
+      localStorage.setItem(this.options.id, JSON.stringify(state));
+      this.emit("saveState", state);
+      _Model.debug("State saved:", state);
+      return state;
+    } catch (error) {
+      _Model.error("Error saving state:", error);
+      this.emit("saveStateError", { error, state });
+      return null;
+    }
   }
   // Відновлення стану
   loadState() {
+    if (!_Model.isStorageAvailable()) {
+      console.warn("localStorage is not available");
+      return null;
+    }
     const savedState = localStorage.getItem(this.options.id);
     if (savedState) {
       const parsed = JSON.parse(savedState);
@@ -991,7 +1078,7 @@ var Model = class _Model extends event_emmiter_default {
   }
   loadStateFromSnapshot(snapshot) {
     if (!snapshot) {
-      console.error("Snapshot is undefined or null");
+      _Model.error("Snapshot is undefined or null");
       return;
     }
     try {
@@ -1014,7 +1101,7 @@ var Model = class _Model extends event_emmiter_default {
       });
       return true;
     } catch (error) {
-      console.error("Error loading state from snapshot:", error);
+      _Model.error("Error loading state from snapshot:", error);
       this.emit("restoreStateError", {
         error,
         snapshot
@@ -1049,7 +1136,7 @@ var Model = class _Model extends event_emmiter_default {
       const func = new Function(...Object.keys(context), `return ${expression}`);
       return func(...Object.values(context));
     } catch (error) {
-      console.error("Error when evaluating expression:", error);
+      _Model.error("Error when evaluating expression:", error);
       return false;
     }
   }
@@ -1057,7 +1144,7 @@ var Model = class _Model extends event_emmiter_default {
   init(selector) {
     const rootElement = typeof selector === "string" ? document.querySelector(selector) : selector;
     if (!rootElement) {
-      console.error("The root element was not found!");
+      _Model.error("The root element was not found!");
       return;
     }
     this.parseLoops(rootElement);
@@ -1071,12 +1158,106 @@ var Model = class _Model extends event_emmiter_default {
   initDevTools(options = {}) {
     return new dev_tools_default(this, options);
   }
+  // Специализированные методы для массивов
+  // Пример использования:
+  // model.applyArrayChanges('users', (users) => users.push({ name: 'Новый пользователь' }));
+  applyArrayChanges(arrayPath, callback) {
+    const array = this.getValueByPath(arrayPath);
+    if (!Array.isArray(array)) {
+      _Model.error(`The path ${arrayPath} is not an array!`);
+      return false;
+    }
+    this.batchProcessing = true;
+    let result;
+    try {
+      result = callback(array);
+      this.loops.forEach((loopInfo, element) => {
+        if (loopInfo.arrayPath === arrayPath) {
+          this.updateLoop(element);
+        }
+      });
+    } finally {
+      this.batchProcessing = false;
+      this.updateAllDOM();
+    }
+    return result;
+  }
+  // Добавим метод для валидации и обработки ошибок
+  validateModel() {
+    const errors = [];
+    const warnings = [];
+    for (const key in this.computed) {
+      const visited = /* @__PURE__ */ new Set();
+      const cyclePath = this.checkCyclicDependencies(key, visited);
+      if (cyclePath) {
+        errors.push({
+          type: "CYCLIC_DEPENDENCY",
+          property: key,
+          message: `Cyclic dependence is found: ${cyclePath.join(" -> ")}`
+        });
+      }
+    }
+    this.domDependencies.forEach((deps, path) => {
+      if (!this.isValidPath(path)) {
+        warnings.push({
+          type: "INVALID_PATH",
+          path,
+          message: `Property ${path} used in the template, but does not exist in the model`
+        });
+      }
+    });
+    return { errors, warnings };
+  }
+  // Проверяем наличие циклических зависимостей
+  checkCyclicDependencies(key, visited, path = []) {
+    if (visited.has(key)) {
+      return [...path, key];
+    }
+    visited.add(key);
+    path.push(key);
+    const computed = this.computed[key];
+    if (!computed || !computed.dependencies) {
+      return null;
+    }
+    for (const dep of computed.dependencies) {
+      if (dep in this.computed) {
+        const cyclePath = this.checkCyclicDependencies(dep, new Set(visited), [...path]);
+        if (cyclePath) {
+          return cyclePath;
+        }
+      }
+    }
+    return null;
+  }
+  // Проверка существования пути в модели
+  isValidPath(path) {
+    try {
+      const value = this.getValueByPath(path);
+      return value !== void 0;
+    } catch (e) {
+      return false;
+    }
+  }
+  destroy() {
+    this.disableAutoSave();
+    this.inputs.forEach(({ element }) => {
+      element.removeEventListener("input", element.__modelInputHandler);
+    });
+    this.elements = [];
+    this.inputs = [];
+    this.domDependencies.clear();
+    this.virtualDom.clear();
+    this.watchers.clear();
+    this.loops.clear();
+    this.events.clear();
+    this.emit("destroy");
+  }
 };
 var model_default = Model;
 
 // src/index.js
 var version = "0.11.0";
-var build_time = "02.03.2025, 19:49:45";
+var build_time = "02.03.2025, 20:45:54";
 model_default.info = () => {
   console.info(`%c Model %c v${version} %c ${build_time} `, "color: white; font-weight: bold; background: #0080fe", "color: white; background: darkgreen", "color: white; background: #0080fe;");
 };
