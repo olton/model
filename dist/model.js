@@ -1,7 +1,7 @@
 
 /*!
  * Model v0.10.0
- * Build: 02.03.2025, 14:54:42
+ * Build: 02.03.2025, 14:57:16
  * Copyright 2012-2025 by Serhii Pimenov
  * Licensed under MIT
  */
@@ -798,8 +798,7 @@ var Model = class _Model extends event_emmiter_default {
     const walker = document.createTreeWalker(
       root,
       NodeFilter.SHOW_TEXT,
-      null,
-      false
+      null
     );
     let node;
     const regex = /\{\{\s*([^}]+)\s*\}\}/g;
@@ -1077,7 +1076,7 @@ var model_default = Model;
 
 // src/index.js
 var version = "0.10.0";
-var build_time = "02.03.2025, 14:54:42";
+var build_time = "02.03.2025, 14:57:16";
 model_default.info = () => {
   console.info(`%c Model %c v${version} %c ${build_time} `, "color: white; font-weight: bold; background: #0080fe", "color: white; background: darkgreen", "color: white; background: #0080fe;");
 };
