@@ -381,7 +381,7 @@ class ModelDevTools {
         let changes= ``;
         for (const change of recentChanges) {
             changes += `
-                <div style="border-bottom: 1px solid #444; padding-bottom: 8px">
+                <div style="border-bottom: 1px solid #444; padding-bottom: 8px; overflow-x: auto">
                     <pre>${JSON.stringify({...change, timestamp: new Date(change.timestamp).toLocaleTimeString()}, null, 2)}</pre>
                 </div>\n`;
         }

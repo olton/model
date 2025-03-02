@@ -20,6 +20,10 @@ globalThis.updateCounter = (operator) => {
     operator === "-" ? app.data.counter-- : app.data.counter++
 }
 
+globalThis.addItem = () => {
+    app.data.items.push(`Item ${app.data.items.length + 1}`)
+}
+
 app.initDevTools({
     enabled: true,
     timeTravel: true,

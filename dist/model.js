@@ -388,7 +388,7 @@ var ModelDevTools = class {
     let changes = ``;
     for (const change of recentChanges) {
       changes += `
-                <div style="border-bottom: 1px solid #444; padding-bottom: 8px">
+                <div style="border-bottom: 1px solid #444; padding-bottom: 8px; overflow-x: auto">
                     <pre>${JSON.stringify({ ...change, timestamp: new Date(change.timestamp).toLocaleTimeString() }, null, 2)}</pre>
                 </div>
 `;
@@ -491,14 +491,14 @@ var Model = class _Model extends event_emmiter_default {
           getter: data[key],
           value: null,
           dependencies: []
-          // Будет заполнено при первом вызове
+          // Буде заповнено під час першого виклику
         };
         delete data[key];
       }
     }
     this.data = this.createReactiveProxy(data);
   }
-  // Метод для регистрации зависимости DOM от свойства
+  // Метод реєстрації залежності DOM від властивості
   registerDomDependency(propertyPath, domElement, info) {
     if (!this.domDependencies.has(propertyPath)) {
       this.domDependencies.set(propertyPath, /* @__PURE__ */ new Set());
@@ -537,7 +537,7 @@ var Model = class _Model extends event_emmiter_default {
         arrayPath,
         parentNode: element.parentNode
       });
-      _Model.log("Update the cycle for the item");
+      _Model.log("Update the loop for the item");
       this.updateLoop(element);
     });
   }
@@ -545,12 +545,12 @@ var Model = class _Model extends event_emmiter_default {
   updateLoop(element) {
     const loopInfo = this.loops.get(element);
     if (!loopInfo) {
-      console.error("No cycle information found for an item");
+      console.error("No loop information found for an item");
       return;
     }
     const { template, itemName, indexName, arrayPath, parentNode } = loopInfo;
     const array = this.getValueByPath(arrayPath);
-    _Model.log("Update cycle for array:", array);
+    _Model.log("Update loop for array:", array);
     if (!Array.isArray(array)) {
       console.error("The value is not an array:", array);
       return;
@@ -606,6 +606,7 @@ var Model = class _Model extends event_emmiter_default {
       this.emit("batchComplete");
     }
   }
+  // Метод для встановлення значення за шляхом
   setValueByPath(path, value) {
     _Model.log("Setting value by path:", { path, value });
     const parts = path.split(".");
@@ -617,6 +618,22 @@ var Model = class _Model extends event_emmiter_default {
       current = current[parts[i]];
     }
     current[parts[parts.length - 1]] = value;
+  }
+  // Метод для отримання значення за шляхом
+  getValueByPath(path) {
+    _Model.log("\u041E\u0442\u0440\u0438\u043C\u0430\u043D\u043D\u044F \u0437\u043D\u0430\u0447\u0435\u043D\u043D\u044F \u0437\u0430 \u0448\u043B\u044F\u0445\u043E\u043C:", path);
+    let value = this.data;
+    if (!path) return value;
+    const parts = path.split(".");
+    for (const part of parts) {
+      if (value === void 0 || value === null) {
+        console.error(`The way ${path} broke off on ${part}`);
+        return void 0;
+      }
+      value = value[part];
+    }
+    _Model.log("The value received:", value);
+    return value;
   }
   // Додаємо спостерігачів (watchers)
   watch(propertyPath, callback) {
@@ -639,7 +656,7 @@ var Model = class _Model extends event_emmiter_default {
     }
     this.formatters.set(propertyPath, formatter);
   }
-  // Оновлюємо метод createArrayProxy
+  // Створення реактивного проксі для масиву
   createArrayProxy(array, path = "") {
     return new Proxy(array, {
       get: (target, property) => {
@@ -735,7 +752,7 @@ var Model = class _Model extends event_emmiter_default {
       }
     });
   }
-  // Вычисление значения computed свойства
+  // Обчислення значення computed властивості
   evaluateComputed(key) {
     const computed = this.computed[key];
     const dependencies = /* @__PURE__ */ new Set();
@@ -764,7 +781,7 @@ var Model = class _Model extends event_emmiter_default {
     });
     return result;
   }
-  // Обновление вычисляемых свойств при изменении зависимостей
+  // Оновлення обчислюваних властивостей при зміні залежностей
   updateComputedProperties(changedProp) {
     for (const key in this.computed) {
       const computed = this.computed[key];
@@ -823,6 +840,7 @@ var Model = class _Model extends event_emmiter_default {
       });
     });
   }
+  // Встановлення значення в input-елемент
   setInputValue(input, value) {
     if (input.type === "checkbox" || input.type === "radio") {
       input.checked = Boolean(value);
@@ -853,7 +871,7 @@ var Model = class _Model extends event_emmiter_default {
       this.setInputValue(item.element, value);
     });
   }
-  // Оновлюємо метод updateDOM для підтримки вкладених шляхів
+  // Оновлення DOM при зміні даних
   updateDOM(propertyPath, value) {
     if (this.domDependencies.has(propertyPath)) {
       this.domDependencies.get(propertyPath).forEach((dep) => {
@@ -874,6 +892,7 @@ var Model = class _Model extends event_emmiter_default {
       }
     });
   }
+  // Парсимо DOM для пошуку умовних виразів
   parseConditionals(rootElement) {
     const conditionalElements = rootElement.querySelectorAll("[data-if]");
     conditionalElements.forEach((element) => {
@@ -889,6 +908,7 @@ var Model = class _Model extends event_emmiter_default {
       this.updateConditional(element, expression);
     });
   }
+  // Оновлення умовного виразу
   updateConditional(element, expression) {
     const currentState = this.virtualDom.get(element);
     const context = { ...this.data };
@@ -898,6 +918,7 @@ var Model = class _Model extends event_emmiter_default {
       this.virtualDom.set(element, result);
     }
   }
+  // Оновлення частини циклу
   updateLoopPart(element, arrayPath, changedValue, changedIndex) {
     const loopInfo = this.loops.get(element);
     if (!loopInfo) return;
@@ -928,7 +949,7 @@ var Model = class _Model extends event_emmiter_default {
       });
     }
   }
-  // Метод для обновления текстового шаблона
+  // Метод оновлення текстового шаблону
   updateTemplateNode(node, template) {
     const newContent = template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
       path = path.trim();
@@ -938,22 +959,6 @@ var Model = class _Model extends event_emmiter_default {
       node.textContent = newContent;
       this.virtualDom.set(node, newContent);
     }
-  }
-  // Метод для отримання значення за шляхом
-  getValueByPath(path) {
-    _Model.log("\u041E\u0442\u0440\u0438\u043C\u0430\u043D\u043D\u044F \u0437\u043D\u0430\u0447\u0435\u043D\u043D\u044F \u0437\u0430 \u0448\u043B\u044F\u0445\u043E\u043C:", path);
-    let value = this.data;
-    if (!path) return value;
-    const parts = path.split(".");
-    for (const part of parts) {
-      if (value === void 0 || value === null) {
-        console.error(`The way ${path} broke off on ${part}`);
-        return void 0;
-      }
-      value = value[part];
-    }
-    _Model.log("The value received:", value);
-    return value;
   }
   // Збереження стану
   saveState() {
@@ -1018,12 +1023,6 @@ var Model = class _Model extends event_emmiter_default {
       return false;
     }
   }
-  // Допоміжний метод для отримання всіх обчислюваних значень
-  getComputedValues() {
-    return Object.fromEntries(
-      Object.entries(this.computed).map(([key, comp]) => [key, comp.value])
-    );
-  }
   // Автоматичне збереження в localStorage
   enableAutoSave(interval = 5e3) {
     this.autoSaveInterval = setInterval(() => {
@@ -1034,44 +1033,12 @@ var Model = class _Model extends event_emmiter_default {
   disableAutoSave() {
     clearInterval(this.autoSaveInterval);
   }
-  // Парсимо DOM для пошуку умовних виразів
-  // parseConditionals(rootElement) {
-  //     Model.log('Looking for items with data-if');
-  //     const conditionalElements = rootElement.querySelectorAll('[data-if]');
-  //     Model.log('Found items from data-if:', conditionalElements.length);
-  //
-  //     conditionalElements.forEach((element) => {
-  //         const expression = element.getAttribute('data-if').trim();
-  //         Model.log('Processing of conditional expression:', expression);
-  //
-  //         // Зберігаємо original display value
-  //         const originalDisplay = element.style.display;
-  //
-  //         // Створюємо функцію оновлення видимості
-  //         const updateVisibility = () => {
-  //             try {
-  //                 // Створюємо контекст з даними моделі
-  //                 const context = {...this.data};
-  //                 // Оцінюємо вираз
-  //                 const result = this.evaluateExpression(expression, context);
-  //
-  //                 element.style.display = result ? originalDisplay || '' : 'none';
-  //                 Model.log(`The result of the expression ${expression}:`, result);
-  //             } catch (error) {
-  //                 console.error('Error in processing data-if:', error);
-  //             }
-  //         };
-  //
-  //         // Додаємо спостерігач за змінними у виразі
-  //         const variables = this.extractVariables(expression);
-  //         variables.forEach(variable => {
-  //             this.watch(variable, () => updateVisibility());
-  //         });
-  //
-  //         // Початкове оновлення
-  //         updateVisibility();
-  //     });
-  // }
+  // Допоміжний метод для отримання всіх обчислюваних значень
+  getComputedValues() {
+    return Object.fromEntries(
+      Object.entries(this.computed).map(([key, comp]) => [key, comp.value])
+    );
+  }
   // Допоміжний метод для вилучення змінних з виразу
   extractVariables(expression) {
     const matches = expression.match(/\b[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*\b/g) || [];
