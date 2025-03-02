@@ -1,7 +1,7 @@
 
 /*!
  * Model v0.9.0
- * Build: 02.03.2025, 01:29:25
+ * Build: 02.03.2025, 02:04:53
  * Copyright 2012-2025 by Serhii Pimenov
  * Licensed under MIT
  */
@@ -78,16 +78,28 @@ var DevToolsWindowStyle = `
             z-index: 9999;
             font-family: monospace;
             
+            *::-webkit-scrollbar {
+              width: 10px;
+            }
+            
+            * {
+              scrollbar-width: thin;
+            }
+            
             .devtools-section {
                 padding: 8px;
                 margin: 4px;
                 border: 1px solid #444;
                 cursor: pointer;
                 hover: background-color: #333;
+                font-size: 12px;
             }
             
             h3 {
                 margin: 0;
+                font-size: 14px;
+                border-bottom: 1px solid #333;
+                padding-bottom: 4px;
             }
         }
         
@@ -117,6 +129,14 @@ var DevToolsWindowStyle = `
             color: #fff;
             font-family: monospace;
             
+            *::-webkit-scrollbar {
+              width: 10px;
+            }
+            
+            * {
+              scrollbar-width: thin;
+            }
+            
             .time-travel-items {
                 padding: 4px; 
                 height: calc(100% - 35px); 
@@ -130,6 +150,7 @@ var DevToolsWindowStyle = `
                 border: 1px solid #444;
                 cursor: pointer;
                 hover: background-color: #333;
+                font-size: 12px;
                 
                 button {
                     margin-top: 8px;
@@ -226,7 +247,7 @@ var ModelDevTools = class {
       dialog = document.createElement("div");
       dialog.id = "model-devtools-time-travel-dialog";
     }
-    const statesList = this.history.reverse().map((snapshot, index) => `
+    const statesList = [...this.history].reverse().map((snapshot, index) => `
             <div class="time-travel-item">
                 <div>Time: ${new Date(snapshot.timestamp).toLocaleTimeString()}</div>
                 <div>Type: ${snapshot.type}</div>
@@ -236,7 +257,7 @@ var ModelDevTools = class {
         `).join("");
     dialog.innerHTML = `
             <div class="dev-tools-header">
-                <span>Time Travel</span>
+                <span>\u23F1 Time Travel</span>
                 <button style="margin-left: auto" onclick="this.parentElement.parentElement.remove()">\xD7</button>
             </div>
             <div class="time-travel-items">${statesList || "Nothing to show!"}</div>
@@ -364,6 +385,14 @@ var ModelDevTools = class {
       }
       return change;
     });
+    let changes = ``;
+    for (const change of recentChanges) {
+      changes += `
+                <div style="border-bottom: 1px solid #444; padding-bottom: 8px">
+                    <pre>${JSON.stringify({ ...change, timestamp: new Date(change.timestamp).toLocaleTimeString() }, null, 2)}</pre>
+                </div>
+`;
+    }
     content.innerHTML = `
             <div class="devtools-section">
                 <h3>Current State:</h3>
@@ -375,7 +404,7 @@ var ModelDevTools = class {
             </div>
             <div class="devtools-section">
                 <h3>Recent Changes:</h3>
-                <pre>${JSON.stringify(recentChanges, null, 2)}</pre>
+                ${changes}
             </div>
         `;
     const timeTravelDialog = document.getElementById("model-devtools-time-travel-dialog");
@@ -621,7 +650,7 @@ var Model = class _Model extends event_emmiter_default {
       }
     });
   }
-  // Новий метод для створення реактивного проксі
+  // Створення реактивного проксі
   createReactiveProxy(obj, path = "") {
     if (Array.isArray(obj)) {
       return this.createArrayProxy(obj, path);
@@ -979,7 +1008,7 @@ var model_default = Model;
 
 // src/index.js
 var version = "0.9.0";
-var build_time = "02.03.2025, 01:29:25";
+var build_time = "02.03.2025, 02:04:53";
 model_default.info = () => {
   console.info(`%c Model %c v${version} %c ${build_time} `, "color: white; font-weight: bold; background: #0080fe", "color: white; background: darkgreen", "color: white; background: #0080fe;");
 };

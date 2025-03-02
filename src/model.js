@@ -240,7 +240,7 @@ class Model extends EventEmitter {
         });
     }
 
-    // Новий метод для створення реактивного проксі
+    // Створення реактивного проксі
     createReactiveProxy(obj, path = '') {
         // Якщо отримуємо масив, створюємо для нього спеціальний проксі
         if (Array.isArray(obj)) {

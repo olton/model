@@ -12,16 +12,28 @@ const DevToolsWindowStyle = `
             z-index: 9999;
             font-family: monospace;
             
+            *::-webkit-scrollbar {
+              width: 10px;
+            }
+            
+            * {
+              scrollbar-width: thin;
+            }
+            
             .devtools-section {
                 padding: 8px;
                 margin: 4px;
                 border: 1px solid #444;
                 cursor: pointer;
                 hover: background-color: #333;
+                font-size: 12px;
             }
             
             h3 {
                 margin: 0;
+                font-size: 14px;
+                border-bottom: 1px solid #333;
+                padding-bottom: 4px;
             }
         }
         
@@ -51,6 +63,14 @@ const DevToolsWindowStyle = `
             color: #fff;
             font-family: monospace;
             
+            *::-webkit-scrollbar {
+              width: 10px;
+            }
+            
+            * {
+              scrollbar-width: thin;
+            }
+            
             .time-travel-items {
                 padding: 4px; 
                 height: calc(100% - 35px); 
@@ -64,6 +84,7 @@ const DevToolsWindowStyle = `
                 border: 1px solid #444;
                 cursor: pointer;
                 hover: background-color: #333;
+                font-size: 12px;
                 
                 button {
                     margin-top: 8px;
@@ -181,7 +202,7 @@ class ModelDevTools {
         }
 
         // Формуємо список станів
-        const statesList = this.history.reverse().map((snapshot, index) => `
+        const statesList = [...this.history].reverse().map((snapshot, index) => `
             <div class="time-travel-item">
                 <div>Time: ${new Date(snapshot.timestamp).toLocaleTimeString()}</div>
                 <div>Type: ${snapshot.type}</div>
@@ -192,7 +213,7 @@ class ModelDevTools {
 
         dialog.innerHTML = `
             <div class="dev-tools-header">
-                <span>Time Travel</span>
+                <span>⏱ Time Travel</span>
                 <button style="margin-left: auto" onclick="this.parentElement.parentElement.remove()">×</button>
             </div>
             <div class="time-travel-items">${statesList || 'Nothing to show!'}</div>
@@ -357,6 +378,14 @@ class ModelDevTools {
             return change;
         });
         
+        let changes= ``;
+        for (const change of recentChanges) {
+            changes += `
+                <div style="border-bottom: 1px solid #444; padding-bottom: 8px">
+                    <pre>${JSON.stringify({...change, timestamp: new Date(change.timestamp).toLocaleTimeString()}, null, 2)}</pre>
+                </div>\n`;
+        }
+        
         content.innerHTML = `
             <div class="devtools-section">
                 <h3>Current State:</h3>
@@ -368,7 +397,7 @@ class ModelDevTools {
             </div>
             <div class="devtools-section">
                 <h3>Recent Changes:</h3>
-                <pre>${JSON.stringify(recentChanges, null, 2)}</pre>
+                ${changes}
             </div>
         `;
         
