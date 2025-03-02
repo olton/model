@@ -6,6 +6,12 @@ const app = new Model({
     status: function () {
         return this.counter === 0 ? "Zero" : this.counter > 0 ? "Positive" : "Negative";
     },
+    items: ["Item 1", "Item 2", "Item 3"],
+    user: {
+        name: "John Doe",
+        age: 30,
+        items: ["Item 1", "Item 2", "Item 3"],
+    }
 })
 
 app.init("#root")

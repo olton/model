@@ -1,7 +1,7 @@
 
 /*!
- * Model v0.6.0
- * Build: 01.03.2025, 23:31:12
+ * Model v0.10.0
+ * Build: 02.03.2025, 02:22:03
  * Copyright 2012-2025 by Serhii Pimenov
  * Licensed under MIT
  */
@@ -483,6 +483,8 @@ var Model = class _Model extends event_emmiter_default {
     this.events = /* @__PURE__ */ new Map();
     this.middleware = new middleware_default();
     this.autoSaveInterval = null;
+    this.domDependencies = /* @__PURE__ */ new Map();
+    this.virtualDom = /* @__PURE__ */ new Map();
     for (const key in data) {
       if (typeof data[key] === "function") {
         this.computed[key] = {
@@ -495,6 +497,16 @@ var Model = class _Model extends event_emmiter_default {
       }
     }
     this.data = this.createReactiveProxy(data);
+  }
+  // Метод для регистрации зависимости DOM от свойства
+  registerDomDependency(propertyPath, domElement, info) {
+    if (!this.domDependencies.has(propertyPath)) {
+      this.domDependencies.set(propertyPath, /* @__PURE__ */ new Set());
+    }
+    this.domDependencies.get(propertyPath).add({
+      element: domElement,
+      ...info
+    });
   }
   // Парсимо DOM для пошуку циклів
   parseLoops(rootElement) {
@@ -778,14 +790,20 @@ var Model = class _Model extends event_emmiter_default {
       let match;
       const text = node.textContent;
       const originalText = text;
+      regex.lastIndex = 0;
       while ((match = regex.exec(text)) !== null) {
         const propPath = match[1].trim();
+        this.registerDomDependency(propPath, node, {
+          type: "template",
+          template: originalText
+        });
         this.elements.push({
           node,
           propName: propPath,
           template: originalText
         });
       }
+      this.virtualDom.set(node, node.textContent);
     }
     const inputs = root.querySelectorAll("[data-model]");
     inputs.forEach((input) => {
@@ -837,17 +855,89 @@ var Model = class _Model extends event_emmiter_default {
   }
   // Оновлюємо метод updateDOM для підтримки вкладених шляхів
   updateDOM(propertyPath, value) {
+    if (this.domDependencies.has(propertyPath)) {
+      this.domDependencies.get(propertyPath).forEach((dep) => {
+        if (dep.type === "template") {
+          this.updateTemplateNode(dep.element, dep.template);
+        } else if (dep.type === "conditional") {
+          this.updateConditional(dep.element, dep.expression);
+        } else if (dep.type === "loop") {
+          this.updateLoopPart(dep.element, dep.arrayPath, value, dep.index);
+        }
+      });
+      return;
+    }
     this.elements.forEach((element) => {
       const isAffected = element.propName === propertyPath || element.propName.startsWith(propertyPath + ".") || propertyPath.startsWith(element.propName + ".");
       if (isAffected) {
-        let newContent = element.template;
-        newContent = newContent.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
-          path = path.trim();
-          return this.getValueByPath(path);
-        });
-        element.node.textContent = newContent;
+        this.updateTemplateNode(element.node, element.template);
       }
     });
+  }
+  parseConditionals(rootElement) {
+    const conditionalElements = rootElement.querySelectorAll("[data-if]");
+    conditionalElements.forEach((element) => {
+      const expression = element.getAttribute("data-if").trim();
+      element.__originalDisplay = element.style.display === "none" ? "" : element.style.display;
+      const variables = this.extractVariables(expression);
+      variables.forEach((variable) => {
+        this.registerDomDependency(variable, element, {
+          type: "conditional",
+          expression
+        });
+      });
+      this.updateConditional(element, expression);
+    });
+  }
+  updateConditional(element, expression) {
+    const currentState = this.virtualDom.get(element);
+    const context = { ...this.data };
+    const result = this.evaluateExpression(expression, context);
+    if (currentState !== result) {
+      element.style.display = result ? element.__originalDisplay || "" : "none";
+      this.virtualDom.set(element, result);
+    }
+  }
+  updateLoopPart(element, arrayPath, changedValue, changedIndex) {
+    const loopInfo = this.loops.get(element);
+    if (!loopInfo) return;
+    const { template, itemName, indexName, parentNode } = loopInfo;
+    const array = this.getValueByPath(arrayPath);
+    if (!Array.isArray(array)) return;
+    const generated = Array.from(
+      parentNode.querySelectorAll(`[data-generated-for="${arrayPath}"]`)
+    );
+    if (changedIndex === void 0 || generated.length !== array.length) {
+      return this.updateLoop(element);
+    }
+    const elementToUpdate = generated[changedIndex];
+    if (elementToUpdate) {
+      const newNode = template.cloneNode(true);
+      this.processTemplateNode(newNode, {
+        [itemName]: array[changedIndex],
+        [indexName || "index"]: changedIndex
+      });
+      while (elementToUpdate.firstChild) {
+        elementToUpdate.removeChild(elementToUpdate.firstChild);
+      }
+      while (newNode.firstChild) {
+        elementToUpdate.appendChild(newNode.firstChild);
+      }
+      Array.from(newNode.attributes).forEach((attr) => {
+        elementToUpdate.setAttribute(attr.name, attr.value);
+      });
+    }
+  }
+  // Метод для обновления текстового шаблона
+  updateTemplateNode(node, template) {
+    const newContent = template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
+      path = path.trim();
+      return this.getValueByPath(path);
+    });
+    if (this.virtualDom.get(node) !== newContent) {
+      node.textContent = newContent;
+      this.virtualDom.set(node, newContent);
+    }
   }
   // Метод для отримання значення за шляхом
   getValueByPath(path) {
@@ -945,31 +1035,43 @@ var Model = class _Model extends event_emmiter_default {
     clearInterval(this.autoSaveInterval);
   }
   // Парсимо DOM для пошуку умовних виразів
-  parseConditionals(rootElement) {
-    _Model.log("Looking for items with data-if");
-    const conditionalElements = rootElement.querySelectorAll("[data-if]");
-    _Model.log("Found items from data-if:", conditionalElements.length);
-    conditionalElements.forEach((element) => {
-      const expression = element.getAttribute("data-if").trim();
-      _Model.log("Processing of conditional expression:", expression);
-      const originalDisplay = element.style.display;
-      const updateVisibility = () => {
-        try {
-          const context = { ...this.data };
-          const result = this.evaluateExpression(expression, context);
-          element.style.display = result ? originalDisplay || "" : "none";
-          _Model.log(`The result of the expression ${expression}:`, result);
-        } catch (error) {
-          console.error("Error in processing data-if:", error);
-        }
-      };
-      const variables = this.extractVariables(expression);
-      variables.forEach((variable) => {
-        this.watch(variable, () => updateVisibility());
-      });
-      updateVisibility();
-    });
-  }
+  // parseConditionals(rootElement) {
+  //     Model.log('Looking for items with data-if');
+  //     const conditionalElements = rootElement.querySelectorAll('[data-if]');
+  //     Model.log('Found items from data-if:', conditionalElements.length);
+  //
+  //     conditionalElements.forEach((element) => {
+  //         const expression = element.getAttribute('data-if').trim();
+  //         Model.log('Processing of conditional expression:', expression);
+  //
+  //         // Зберігаємо original display value
+  //         const originalDisplay = element.style.display;
+  //
+  //         // Створюємо функцію оновлення видимості
+  //         const updateVisibility = () => {
+  //             try {
+  //                 // Створюємо контекст з даними моделі
+  //                 const context = {...this.data};
+  //                 // Оцінюємо вираз
+  //                 const result = this.evaluateExpression(expression, context);
+  //
+  //                 element.style.display = result ? originalDisplay || '' : 'none';
+  //                 Model.log(`The result of the expression ${expression}:`, result);
+  //             } catch (error) {
+  //                 console.error('Error in processing data-if:', error);
+  //             }
+  //         };
+  //
+  //         // Додаємо спостерігач за змінними у виразі
+  //         const variables = this.extractVariables(expression);
+  //         variables.forEach(variable => {
+  //             this.watch(variable, () => updateVisibility());
+  //         });
+  //
+  //         // Початкове оновлення
+  //         updateVisibility();
+  //     });
+  // }
   // Допоміжний метод для вилучення змінних з виразу
   extractVariables(expression) {
     const matches = expression.match(/\b[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*\b/g) || [];
@@ -1007,8 +1109,8 @@ var Model = class _Model extends event_emmiter_default {
 var model_default = Model;
 
 // src/index.js
-var version = "0.6.0";
-var build_time = "01.03.2025, 23:31:12";
+var version = "0.10.0";
+var build_time = "02.03.2025, 02:22:03";
 model_default.info = () => {
   console.info(`%c Model %c v${version} %c ${build_time} `, "color: white; font-weight: bold; background: #0080fe", "color: white; background: darkgreen", "color: white; background: #0080fe;");
 };

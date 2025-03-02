@@ -29,6 +29,8 @@ class Model extends EventEmitter {
         this.events = new Map();
         this.middleware = new MiddlewareManager();
         this.autoSaveInterval = null;
+        this.domDependencies = new Map(); // Хранит связи между свойствами и DOM-элементами
+        this.virtualDom = new Map(); // Для сравнения состояний
 
         // Регистрируем вычисляемые свойства
         for (const key in data) {
@@ -45,6 +47,17 @@ class Model extends EventEmitter {
         this.data = this.createReactiveProxy(data);
     }
 
+    // Метод для регистрации зависимости DOM от свойства
+    registerDomDependency(propertyPath, domElement, info) {
+        if (!this.domDependencies.has(propertyPath)) {
+            this.domDependencies.set(propertyPath, new Set());
+        }
+        this.domDependencies.get(propertyPath).add({
+            element: domElement,
+            ...info
+        });
+    }
+    
     // Парсимо DOM для пошуку циклів
     parseLoops(rootElement) {
         Model.log('Looking for items with data-for');
@@ -414,14 +427,28 @@ class Model extends EventEmitter {
             const text = node.textContent;
             const originalText = text;
 
+            // Сбрасываем индекс, чтобы проверить все совпадения заново
+            regex.lastIndex = 0;
+
             while ((match = regex.exec(text)) !== null) {
                 const propPath = match[1].trim();
+
+                // Регистрируем зависимость
+                this.registerDomDependency(propPath, node, {
+                    type: 'template',
+                    template: originalText
+                });
+
+                // Для совместимости с существующим кодом
                 this.elements.push({
                     node,
                     propName: propPath,
                     template: originalText
                 });
             }
+
+            // Сохраняем начальное состояние в virtualDom
+            this.virtualDom.set(node, node.textContent);
         }
 
         // Знаходимо всі input-елементи з атрибутом data-model
@@ -485,24 +512,131 @@ class Model extends EventEmitter {
 
     // Оновлюємо метод updateDOM для підтримки вкладених шляхів
     updateDOM(propertyPath, value) {
+        // Если есть прямые зависимости - обновляем только их
+        if (this.domDependencies.has(propertyPath)) {
+            this.domDependencies.get(propertyPath).forEach(dep => {
+                if (dep.type === 'template') {
+                    this.updateTemplateNode(dep.element, dep.template);
+                } else if (dep.type === 'conditional') {
+                    this.updateConditional(dep.element, dep.expression);
+                } else if (dep.type === 'loop') {
+                    this.updateLoopPart(dep.element, dep.arrayPath, value, dep.index);
+                }
+            });
+            return;
+        }
+
+        // Обратная совместимость со старым методом
         this.elements.forEach(element => {
-            // Оновлюємо елемент якщо змінилась будь-яка частина шляху
             const isAffected = element.propName === propertyPath ||
                 element.propName.startsWith(propertyPath + '.') ||
                 propertyPath.startsWith(element.propName + '.');
 
             if (isAffected) {
-                let newContent = element.template;
-
-                // Замінюємо всі вирази в шаблоні
-                newContent = newContent.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
-                    path = path.trim();
-                    return this.getValueByPath(path);
-                });
-
-                element.node.textContent = newContent;
+                this.updateTemplateNode(element.node, element.template);
             }
         });
+    }
+
+    parseConditionals(rootElement) {
+        const conditionalElements = rootElement.querySelectorAll('[data-if]');
+
+        conditionalElements.forEach((element) => {
+            const expression = element.getAttribute('data-if').trim();
+
+            // Сохраняем оригинальное значение display
+            element.__originalDisplay =
+                element.style.display === 'none' ? '' : element.style.display;
+
+            // Регистрируем зависимости
+            const variables = this.extractVariables(expression);
+            variables.forEach(variable => {
+                this.registerDomDependency(variable, element, {
+                    type: 'conditional',
+                    expression: expression
+                });
+            });
+
+            // Начальное обновление
+            this.updateConditional(element, expression);
+        });
+    }
+
+    updateConditional(element, expression) {
+        // Получаем текущее состояние
+        const currentState = this.virtualDom.get(element);
+
+        // Вычисляем новое состояние
+        const context = {...this.data};
+        const result = this.evaluateExpression(expression, context);
+
+        // Обновляем DOM только при изменении состояния
+        if (currentState !== result) {
+            element.style.display = result ?
+                (element.__originalDisplay || '') : 'none';
+            this.virtualDom.set(element, result);
+        }
+    }
+    
+    updateLoopPart(element, arrayPath, changedValue, changedIndex) {
+        const loopInfo = this.loops.get(element);
+        if (!loopInfo) return;
+
+        const {template, itemName, indexName, parentNode} = loopInfo;
+        const array = this.getValueByPath(arrayPath);
+
+        if (!Array.isArray(array)) return;
+
+        // Получаем существующие сгенерированные элементы
+        const generated = Array.from(
+            parentNode.querySelectorAll(`[data-generated-for="${arrayPath}"]`)
+        );
+
+        // Если изменений больше чем элементов, проще обновить всё
+        if (changedIndex === undefined || generated.length !== array.length) {
+            return this.updateLoop(element); // Полное обновление
+        }
+
+        // Обновляем только измененный элемент
+        const elementToUpdate = generated[changedIndex];
+        if (elementToUpdate) {
+            // Создаём новый элемент на основе шаблона
+            const newNode = template.cloneNode(true);
+
+            // Применяем контекст для нового элемента
+            this.processTemplateNode(newNode, {
+                [itemName]: array[changedIndex],
+                [indexName || 'index']: changedIndex
+            });
+
+            // Заменяем только содержимое, без удаления элемента
+            while (elementToUpdate.firstChild) {
+                elementToUpdate.removeChild(elementToUpdate.firstChild);
+            }
+
+            while (newNode.firstChild) {
+                elementToUpdate.appendChild(newNode.firstChild);
+            }
+
+            // Копируем атрибуты
+            Array.from(newNode.attributes).forEach(attr => {
+                elementToUpdate.setAttribute(attr.name, attr.value);
+            });
+        }
+    }
+    
+    // Метод для обновления текстового шаблона
+    updateTemplateNode(node, template) {
+        const newContent = template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
+            path = path.trim();
+            return this.getValueByPath(path);
+        });
+
+        // Обновляем DOM только если содержимое изменилось
+        if (this.virtualDom.get(node) !== newContent) {
+            node.textContent = newContent;
+            this.virtualDom.set(node, newContent);
+        }
     }
 
     // Метод для отримання значення за шляхом
@@ -624,43 +758,43 @@ class Model extends EventEmitter {
     }
     
     // Парсимо DOM для пошуку умовних виразів
-    parseConditionals(rootElement) {
-        Model.log('Looking for items with data-if');
-        const conditionalElements = rootElement.querySelectorAll('[data-if]');
-        Model.log('Found items from data-if:', conditionalElements.length);
-
-        conditionalElements.forEach((element) => {
-            const expression = element.getAttribute('data-if').trim();
-            Model.log('Processing of conditional expression:', expression);
-
-            // Зберігаємо original display value
-            const originalDisplay = element.style.display;
-
-            // Створюємо функцію оновлення видимості
-            const updateVisibility = () => {
-                try {
-                    // Створюємо контекст з даними моделі
-                    const context = {...this.data};
-                    // Оцінюємо вираз
-                    const result = this.evaluateExpression(expression, context);
-
-                    element.style.display = result ? originalDisplay || '' : 'none';
-                    Model.log(`The result of the expression ${expression}:`, result);
-                } catch (error) {
-                    console.error('Error in processing data-if:', error);
-                }
-            };
-
-            // Додаємо спостерігач за змінними у виразі
-            const variables = this.extractVariables(expression);
-            variables.forEach(variable => {
-                this.watch(variable, () => updateVisibility());
-            });
-
-            // Початкове оновлення
-            updateVisibility();
-        });
-    }
+    // parseConditionals(rootElement) {
+    //     Model.log('Looking for items with data-if');
+    //     const conditionalElements = rootElement.querySelectorAll('[data-if]');
+    //     Model.log('Found items from data-if:', conditionalElements.length);
+    //
+    //     conditionalElements.forEach((element) => {
+    //         const expression = element.getAttribute('data-if').trim();
+    //         Model.log('Processing of conditional expression:', expression);
+    //
+    //         // Зберігаємо original display value
+    //         const originalDisplay = element.style.display;
+    //
+    //         // Створюємо функцію оновлення видимості
+    //         const updateVisibility = () => {
+    //             try {
+    //                 // Створюємо контекст з даними моделі
+    //                 const context = {...this.data};
+    //                 // Оцінюємо вираз
+    //                 const result = this.evaluateExpression(expression, context);
+    //
+    //                 element.style.display = result ? originalDisplay || '' : 'none';
+    //                 Model.log(`The result of the expression ${expression}:`, result);
+    //             } catch (error) {
+    //                 console.error('Error in processing data-if:', error);
+    //             }
+    //         };
+    //
+    //         // Додаємо спостерігач за змінними у виразі
+    //         const variables = this.extractVariables(expression);
+    //         variables.forEach(variable => {
+    //             this.watch(variable, () => updateVisibility());
+    //         });
+    //
+    //         // Початкове оновлення
+    //         updateVisibility();
+    //     });
+    // }
 
     // Допоміжний метод для вилучення змінних з виразу
     extractVariables(expression) {
