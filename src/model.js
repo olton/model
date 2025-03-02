@@ -434,8 +434,7 @@ class Model extends EventEmitter {
         const walker = document.createTreeWalker(
             root,
             NodeFilter.SHOW_TEXT,
-            null,
-            false
+            null
         );
 
         let node;
