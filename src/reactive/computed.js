@@ -94,7 +94,7 @@ export default class ComputedProps {
     }
 
     // Допоміжний метод для отримання всіх обчислюваних значень
-    get() {
+    all() {
         return Object.fromEntries(
             Object.entries(this.computed)
                 .map(([key, comp]) => [key, comp.value])

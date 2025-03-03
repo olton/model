@@ -1,4 +1,4 @@
-export default class ComputedManager {
+export default class ConditionalManager {
     constructor(domManager, model) {
         this.domManager = domManager;
         this.model = model;
@@ -126,7 +126,7 @@ export default class ComputedManager {
             return false;
         }
     }
-
+    
     // Освобождение ресурсов
     destroy() {
         this.virtualDom.clear();

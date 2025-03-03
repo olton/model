@@ -1,7 +1,7 @@
 
 /*!
  * Model v0.11.0
- * Build: 03.03.2025, 08:22:35
+ * Build: 03.03.2025, 11:28:57
  * Copyright 2012-2025 by Serhii Pimenov
  * Licensed under MIT
  */
@@ -38,8 +38,8 @@ var EventEmitter = class {
 };
 var event_emitter_default = EventEmitter;
 
-// src/dev/dev-tools.js
-var DevToolsWindowStyle = `
+// src/dev/dev-tools.style.js
+var DevToolsStyle = `
     <style>
         #model-devtools-panel  { 
             position: fixed;
@@ -169,6 +169,9 @@ var DevToolsWindowStyle = `
         }
     </style>
 `;
+var dev_tools_style_default = DevToolsStyle;
+
+// src/dev/dev-tools.js
 var ModelDevTools = class {
   constructor(model, options = {}) {
     this.model = model;
@@ -193,7 +196,7 @@ var ModelDevTools = class {
     panel.style.cssText = `display: none;`;
     const header = document.createElement("div");
     header.innerHTML = `
-            ${DevToolsWindowStyle}
+            ${dev_tools_style_default}
             <div class="dev-tools-header">
                 <span>\u{1F6E0} Model DevTools</span>
                 <div>
@@ -227,7 +230,8 @@ var ModelDevTools = class {
                 <div>Time: ${new Date(snapshot.timestamp).toLocaleTimeString()}</div>
                 <div>Type: ${snapshot.type}</div>
                 <div>Property: ${snapshot.property || snapshot.event || snapshot.path || ""}</div>
-                <div>Value: ${snapshot.type === "computed-update" ? snapshot.newValue : snapshot.oldValue + " -> " + snapshot.newValue}</div>
+                <div>Value: ${snapshot.type === "computed-update" ? snapshot.newValue : typeof snapshot.oldValue !== "undefined" && typeof snapshot.newValue !== "undefined" ? `${JSON.stringify(snapshot.oldValue)} -> ${JSON.stringify(snapshot.newValue)}` : JSON.stringify(snapshot.newValue || snapshot.value || "")}</div>
+                <button style="display: none" onclick="window.__MODEL_DEVTOOLS__.timeTravel(${this.history.length - 1 - index})">Apply this state</button>
             </div>
         `).join("");
     dialog.innerHTML = `
@@ -238,10 +242,6 @@ var ModelDevTools = class {
             <div class="time-travel-items">${statesList || "Nothing to show!"}</div>
         `;
     document.body.appendChild(dialog);
-    if (!statesList) {
-      setTimeout(() => {
-      }, 2e3);
-    }
   }
   createToggleButton() {
     const button = document.createElement("button");
@@ -252,72 +252,55 @@ var ModelDevTools = class {
     document.body.appendChild(button);
   }
   setupModelListeners() {
-    this.model.on("change", ({ property, oldValue, newValue }) => {
+    this.model.store.on("change", (data) => {
       this.logChange({
         type: "data-change",
-        property,
-        oldValue,
-        newValue,
+        path: data.path,
+        oldValue: data.oldValue,
+        newValue: data.newValue,
         timestamp: Date.now()
       });
     });
-    this.model.on("*", (eventName, data) => {
-      if (eventName !== "change" && eventName !== "compute") {
+    this.model.store.on("*", (eventName, data) => {
+      if (eventName !== "change" && eventName !== "compute" && eventName !== "arrayChange") {
         this.logChange({
-          type: "event",
+          type: "store-event",
           event: eventName,
           data,
           timestamp: Date.now()
         });
       }
     });
-    this.model.on("compute", ({ key, value }) => {
+    this.model.on("*", (eventName, data) => {
+      if (eventName !== "change" && eventName !== "compute") {
+        this.logChange({
+          type: "model-event",
+          event: eventName,
+          data,
+          timestamp: Date.now()
+        });
+      }
+    });
+    this.model.store.on("compute", (data) => {
       this.logChange({
         type: "computed-update",
-        property: key,
-        newValue: value,
+        property: data.key,
+        dependencies: Array.from(data.dependencies),
+        newValue: data.value,
         timestamp: Date.now()
       });
     });
-    this.setupArrayObserver();
-  }
-  setupArrayObserver() {
-    const arrayMethods = ["push", "pop", "shift", "unshift", "splice", "sort", "reverse"];
-    const observeArray = (array, path) => {
-      arrayMethods.forEach((method) => {
-        const original = array[method];
-        array[method] = (...args) => {
-          const oldValue = [...array];
-          const result = original.apply(array, args);
-          this.logChange({
-            type: "array-operation",
-            path,
-            method,
-            args,
-            oldValue,
-            newValue: [...array],
-            timestamp: Date.now()
-          });
-          return result;
-        };
+    this.model.store.on("arrayChange", (data) => {
+      this.logChange({
+        type: "array-operation",
+        path: data.path,
+        method: data.method,
+        args: data.args,
+        oldValue: data.oldValue,
+        newValue: data.newValue,
+        timestamp: Date.now()
       });
-    };
-    const findAndObserveArrays = (obj, parentPath = "") => {
-      for (const [key, value] of Object.entries(obj)) {
-        const currentPath = parentPath ? `${parentPath}.${key}` : key;
-        if (Array.isArray(value)) {
-          observeArray(value, currentPath);
-          value.forEach((item, index) => {
-            if (typeof item === "object" && item !== null) {
-              findAndObserveArrays(item, `${currentPath}[${index}]`);
-            }
-          });
-        } else if (typeof value === "object" && value !== null) {
-          findAndObserveArrays(value, currentPath);
-        }
-      }
-    };
-    findAndObserveArrays(this.model.data);
+    });
   }
   logChange(entry) {
     if (!this.options.enabled) return;
@@ -330,9 +313,8 @@ var ModelDevTools = class {
     const snapshot = {
       ...entry,
       state: JSON.parse(JSON.stringify(this.model.data)),
-      computed: Object.fromEntries(
-        Object.entries(this.model.computed).map(([key, comp]) => [key, comp.value])
-      )
+      // Получаем все вычисляемые свойства
+      computed: this.getComputedValues()
     };
     this.history = this.history.slice(0, this.currentIndex + 1);
     this.history.push(snapshot);
@@ -346,51 +328,93 @@ var ModelDevTools = class {
     const content = document.getElementById("model-devtools-content");
     if (!content) return;
     const formatValue = (value) => {
-      if (Array.isArray(value)) {
-        return `Array(${value.length}) ${JSON.stringify(value, null, 2)}`;
+      if (value === void 0) return "undefined";
+      if (value === null) return "null";
+      try {
+        if (Array.isArray(value)) {
+          return `Array(${value.length}) ${JSON.stringify(value, null, 2)}`;
+        }
+        return JSON.stringify(value, null, 2);
+      } catch (e) {
+        return String(value);
       }
-      return JSON.stringify(value, null, 2);
     };
-    const recentChanges = this.getRecentChanges().map((change) => {
-      if (change.type === "array-operation") {
-        return {
-          ...change,
-          description: `${change.path}.${change.method}(${change.args.map((arg) => JSON.stringify(arg)).join(", ")})`
-        };
-      }
-      return change;
-    });
+    const recentChanges = this.getRecentChanges();
     let changes = ``;
     for (const change of recentChanges) {
+      let changeContent;
+      try {
+        const formattedChange = {
+          ...change,
+          timestamp: new Date(change.timestamp).toLocaleTimeString()
+        };
+        changeContent = JSON.stringify(formattedChange, null, 2);
+      } catch (e) {
+        changeContent = `Error formatting change: ${e.message}`;
+      }
       changes += `
-                <div style="border-bottom: 1px solid #444; padding-bottom: 8px; overflow-x: auto">
-                    <pre>${JSON.stringify({ ...change, timestamp: new Date(change.timestamp).toLocaleTimeString() }, null, 2)}</pre>
-                </div>
+            <div style="border-bottom: 1px solid #444; padding-bottom: 8px; overflow-x: auto">
+                <pre>${changeContent}</pre>
+            </div>
 `;
     }
+    const computedValues = this.getComputedValues();
     content.innerHTML = `
-            <div class="devtools-section">
-                <h3>Current State:</h3>
-                <pre>${formatValue(this.model.data)}</pre>
-            </div>
-            <div class="devtools-section">
-                <h3>Computed Values:</h3>
-                <pre>${formatValue(this.getComputedValues())}</pre>
-            </div>
-            <div class="devtools-section">
-                <h3>Recent Changes:</h3>
-                ${changes}
-            </div>
-        `;
+        <div class="devtools-section">
+            <h3>Current State:</h3>
+            <pre>${formatValue(this.model.data)}</pre>
+        </div>
+        <div class="devtools-section">
+            <h3>Computed Values:</h3>
+            <pre>${formatValue(computedValues)}</pre>
+        </div>
+        <div class="devtools-section">
+            <h3>DOM Dependencies:</h3>
+            <pre>${this.formatDOMDependencies()}</pre>
+        </div>
+        <div class="devtools-section">
+            <h3>Recent Changes:</h3>
+            ${changes}
+        </div>
+    `;
     const timeTravelDialog = document.getElementById("model-devtools-time-travel-dialog");
     if (timeTravelDialog) {
       this.showTimeTravelDialog();
     }
   }
+  formatDOMDependencies() {
+    try {
+      const dependencies = {};
+      this.model.dom.domDependencies.forEach((value, key) => {
+        dependencies[key] = Array.from(value).map((dep) => ({
+          type: dep.type,
+          element: dep.element.tagName
+        }));
+      });
+      return JSON.stringify(dependencies, null, 2);
+    } catch (e) {
+      return `Error formatting DOM dependencies: ${e.message}`;
+    }
+  }
   getComputedValues() {
-    return Object.fromEntries(
-      Object.entries(this.model.computed).map(([key, comp]) => [key, comp.value])
-    );
+    if (!this.model.computed) return {};
+    if (typeof this.model.computed.all === "function") {
+      return this.model.computed.all();
+    }
+    if (this.model.computed.keys && Array.isArray(this.model.computed.keys)) {
+      const result = {};
+      for (const key of this.model.computed.keys) {
+        result[key] = this.model.computed.getValue(key);
+      }
+      return result;
+    }
+    const computedValues = {};
+    for (const key in this.model.data) {
+      if (this.model.computed && typeof this.model.computed[key] !== "undefined") {
+        computedValues[key] = this.model.data[key];
+      }
+    }
+    return computedValues;
   }
   getRecentChanges() {
     return this.history.slice(-5).reverse();
@@ -401,26 +425,52 @@ var ModelDevTools = class {
       panel.style.display = panel.style.display === "none" ? "block" : "none";
     }
   }
-  // API для консолі розробника
+  // API для консоли разработчика
   inspect(path) {
-    return this.model.getValueByPath(path);
+    return this.model.store.get(path);
   }
   timeTravel(index) {
-    if (!this.options.timeTravel) return;
+    if (!this.options.timeTravel || true) return;
     if (index < 0 || index >= this.history.length) return;
     const snapshot = this.history[index];
-    this.model.loadStateFromSnapshot(snapshot.state);
-    this.currentIndex = index;
+    try {
+      const origEnabled = this.options.enabled;
+      this.options.enabled = false;
+      this.model.store.setState(snapshot.state);
+      if (this.model.computed) {
+        if (typeof this.model.computed.recomputeAll === "function") {
+          this.model.computed.recomputeAll();
+        } else {
+          for (const key in snapshot.computed) {
+            if (typeof this.model.computed.evaluate === "function") {
+              this.model.computed.evaluate(key, true);
+            } else if (typeof this.model.computed.recompute === "function") {
+              this.model.computed.recompute(key);
+            }
+          }
+        }
+      }
+      this.model.dom.updateAllDOM();
+      this.currentIndex = index;
+      this.options.enabled = origEnabled;
+      console.log(`Time traveled to snapshot ${index}`, snapshot);
+    } catch (e) {
+      console.error("Error during time travel:", e);
+    }
   }
-  // Методи для аналізу продуктивності
+  // Методы для анализа производительности
   startPerfMonitoring() {
     this.perfMetrics = {
       updates: 0,
       computations: 0,
+      domUpdates: 0,
       startTime: Date.now()
     };
-    this.model.on("*", () => {
+    this.model.store.on("change", () => {
       this.perfMetrics.updates++;
+    });
+    this.model.store.on("compute", () => {
+      this.perfMetrics.computations++;
     });
   }
   getPerfReport() {
@@ -428,7 +478,8 @@ var ModelDevTools = class {
     return {
       totalUpdates: this.perfMetrics.updates,
       updatesPerSecond: this.perfMetrics.updates / duration,
-      computationsPerSecond: this.perfMetrics.computations / duration
+      computationsPerSecond: this.perfMetrics.computations / duration,
+      domUpdatesPerSecond: this.perfMetrics.domUpdates / duration
     };
   }
 };
@@ -512,7 +563,8 @@ var MiddlewareManager = class {
   }
   use(middleware) {
     if (typeof middleware !== "function") {
-      throw new Error("MIDDLEWARE should be a function!");
+      console.error("MIDDLEWARE should be a function!");
+      return;
     }
     this.middlewares.push(middleware);
   }
@@ -708,16 +760,44 @@ var ReactiveStore = class extends event_emitter_default {
     }
     const oldArray = [...array];
     const result = array[method].apply(array, args);
-    this.emit("change", {
+    this.emit("arrayChange", {
       path,
       method,
       args,
       oldValue: oldArray,
       newValue: [...array]
     });
+    this.emit("change", {
+      path,
+      oldValue: oldArray,
+      newValue: [...array]
+    });
     if (this.watchers.has(path)) {
       this.watchers.get(path).forEach((callback) => {
         callback([...array], oldArray);
+      });
+    }
+    return result;
+  }
+  // Специализированные методы для массивов
+  // Пример использования:
+  // model.applyArrayChanges('users', (users) => users.push({ name: 'Новый пользователь' }));
+  applyArrayChanges(path, callback) {
+    const array = this.get(path);
+    if (!Array.isArray(array)) {
+      console.error(`The path ${path} is not an array!`);
+      return false;
+    }
+    const oldArray = [...array];
+    const result = callback(array);
+    this.emit("change", {
+      path,
+      oldValue: oldArray,
+      newValue: [...array]
+    });
+    if (this.watchers.has(path)) {
+      this.watchers.get(path).forEach((callback2) => {
+        callback2([...array], oldArray);
       });
     }
     return result;
@@ -816,10 +896,262 @@ var ReactiveStore = class extends event_emitter_default {
     }
     this.formatters.set(propertyPath, formatter);
   }
+  // Проверка существования пути в модели
+  isValidPath(path) {
+    try {
+      const value = this.get(path);
+      return value !== void 0;
+    } catch (e) {
+      return false;
+    }
+  }
   destroy() {
     this.state = null;
     this.watchers.clear();
     this.previousState = null;
+  }
+};
+
+// src/dom/loop-manager.js
+var LoopManager = class {
+  constructor(domManager, model) {
+    this.domManager = domManager;
+    this.model = model;
+    this.loops = /* @__PURE__ */ new Map();
+  }
+  // Парсинг циклов в DOM (data-for)
+  parseLoops(rootElement) {
+    const loopElements = rootElement.querySelectorAll("[data-for]");
+    loopElements.forEach((element) => {
+      const expression = element.getAttribute("data-for").trim();
+      const matches = expression.match(/^\s*(\w+)(?:\s*,\s*(\w+))?\s+in\s+(\w+(?:\.\w+)*)\s*$/);
+      if (!matches) {
+        console.error("\u041D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0439 \u0444\u043E\u0440\u043C\u0430\u0442 \u0432\u044B\u0440\u0430\u0436\u0435\u043D\u0438\u044F data-for:", expression);
+        return;
+      }
+      const [_, itemName, indexName, arrayPath] = matches;
+      const array = this.model.store.get(arrayPath);
+      if (!Array.isArray(array)) {
+        console.error(`\u0417\u043D\u0430\u0447\u0435\u043D\u0438\u0435 \u043F\u043E \u043F\u0443\u0442\u0438 ${arrayPath} \u043D\u0435 \u044F\u0432\u043B\u044F\u0435\u0442\u0441\u044F \u043C\u0430\u0441\u0441\u0438\u0432\u043E\u043C:`, array);
+        return;
+      }
+      const template = element.cloneNode(true);
+      this.loops.set(element, {
+        template,
+        itemName,
+        indexName,
+        arrayPath,
+        parentNode: element.parentNode
+      });
+      this.domManager.registerDomDependency(arrayPath, element, {
+        type: "loop",
+        arrayPath
+      });
+      this.updateLoop(element);
+    });
+  }
+  // Обновление всех циклов
+  updateLoops(arrayPath, value) {
+    this.loops.forEach((loopInfo, element) => {
+      if (loopInfo.arrayPath === arrayPath) {
+        this.updateLoop(element);
+      }
+    });
+  }
+  // Обновление конкретного цикла
+  updateLoop(element) {
+    const loopInfo = this.loops.get(element);
+    if (!loopInfo) {
+      console.error("\u0418\u043D\u0444\u043E\u0440\u043C\u0430\u0446\u0438\u044F \u043E \u0446\u0438\u043A\u043B\u0435 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u0430 \u0434\u043B\u044F \u044D\u043B\u0435\u043C\u0435\u043D\u0442\u0430");
+      return;
+    }
+    const { template, itemName, indexName, arrayPath, parentNode } = loopInfo;
+    const array = this.model.store.get(arrayPath);
+    if (!Array.isArray(array)) {
+      console.error("\u0417\u043D\u0430\u0447\u0435\u043D\u0438\u0435 \u043D\u0435 \u044F\u0432\u043B\u044F\u0435\u0442\u0441\u044F \u043C\u0430\u0441\u0441\u0438\u0432\u043E\u043C:", array);
+      return;
+    }
+    const generated = parentNode.querySelectorAll(`[data-generated-for="${arrayPath}"]`);
+    generated.forEach((el) => el.remove());
+    array.forEach((item, index) => {
+      const newNode = template.cloneNode(true);
+      newNode.style.display = "";
+      newNode.removeAttribute("data-for");
+      newNode.setAttribute("data-generated-for", arrayPath);
+      newNode.setAttribute("data-item-index", index);
+      this.domManager.processTemplateNode(newNode, {
+        [itemName]: item,
+        [indexName || "index"]: index
+      });
+      parentNode.insertBefore(newNode, element);
+    });
+    element.style.display = "none";
+  }
+  // Обновление части цикла
+  updateLoopPart(element, arrayPath, changedValue, changedIndex) {
+    const loopInfo = this.loops.get(element);
+    if (!loopInfo) return;
+    const { template, itemName, indexName, parentNode } = loopInfo;
+    const array = this.model.store.get(arrayPath);
+    if (!Array.isArray(array)) return;
+    const generated = Array.from(
+      parentNode.querySelectorAll(`[data-generated-for="${arrayPath}"]`)
+    );
+    if (changedIndex === void 0 || generated.length !== array.length) {
+      return this.updateLoop(element);
+    }
+    const elementToUpdate = generated[changedIndex];
+    if (elementToUpdate) {
+      const newNode = template.cloneNode(true);
+      this.domManager.processTemplateNode(newNode, {
+        [itemName]: array[changedIndex],
+        [indexName || "index"]: changedIndex
+      });
+      while (elementToUpdate.firstChild) {
+        elementToUpdate.removeChild(elementToUpdate.firstChild);
+      }
+      while (newNode.firstChild) {
+        elementToUpdate.appendChild(newNode.firstChild);
+      }
+      Array.from(newNode.attributes).forEach((attr) => {
+        elementToUpdate.setAttribute(attr.name, attr.value);
+      });
+    }
+  }
+  // Оптимизированный метод для обнаружения изменений в массивах
+  detectArrayChanges(newArray, oldArray = []) {
+    const changes = {
+      added: [],
+      removed: [],
+      moved: []
+    };
+    for (let i = 0; i < newArray.length; i++) {
+      const item = newArray[i];
+      const oldIndex = oldArray.findIndex(
+        (oldItem) => JSON.stringify(oldItem) === JSON.stringify(item)
+      );
+      if (oldIndex === -1) {
+        changes.added.push({ index: i, item });
+      } else if (oldIndex !== i) {
+        changes.moved.push({ oldIndex, newIndex: i, item });
+      }
+    }
+    for (let i = 0; i < oldArray.length; i++) {
+      const item = oldArray[i];
+      const newIndex = newArray.findIndex(
+        (newItem) => JSON.stringify(newItem) === JSON.stringify(item)
+      );
+      if (newIndex === -1) {
+        changes.removed.push({ index: i, item });
+      }
+    }
+    return changes;
+  }
+  // Получение всех зарегистрированных циклов
+  getLoops() {
+    return this.loops;
+  }
+  // Очистка ресурсов
+  destroy() {
+    this.loops.clear();
+  }
+};
+
+// src/dom/conditional-manager.js
+var ConditionalManager = class {
+  constructor(domManager, model) {
+    this.domManager = domManager;
+    this.model = model;
+    this.virtualDom = /* @__PURE__ */ new Map();
+  }
+  // Парсим DOM для поиска условных выражений
+  parseConditionals(rootElement) {
+    const conditionalElements = rootElement.querySelectorAll("[data-if]");
+    conditionalElements.forEach((element) => {
+      const expression = element.getAttribute("data-if").trim();
+      element.__originalDisplay = element.style.display === "none" ? "" : element.style.display;
+      const variables = this.extractVariables(expression);
+      variables.forEach((variable) => {
+        this.domManager.registerDomDependency(variable, element, {
+          type: "conditional",
+          expression
+        });
+      });
+      this.updateConditional(element, expression);
+    });
+  }
+  // Обновление условного выражения
+  updateConditional(element, expression) {
+    const currentState = this.virtualDom.get(element);
+    const context = { ...this.model.store.getState() };
+    const result = this.evaluateExpression(expression, context);
+    if (currentState !== result) {
+      element.style.display = result ? element.__originalDisplay || "" : "none";
+      this.virtualDom.set(element, result);
+    }
+  }
+  // Парсим DOM для поиска атрибутов с привязками
+  parseAttributes(rootElement) {
+    const elements = rootElement.querySelectorAll("[data-bind]");
+    elements.forEach((element) => {
+      const bindingExpression = element.getAttribute("data-bind");
+      try {
+        const bindings = JSON.parse(bindingExpression.replace(/'/g, '"'));
+        for (const [attributeName, expression] of Object.entries(bindings)) {
+          const variables = this.extractVariables(expression);
+          variables.forEach((variable) => {
+            this.domManager.registerDomDependency(variable, element, {
+              type: "attribute",
+              attribute: attributeName,
+              expression
+            });
+          });
+          this.updateAttribute(element, attributeName, expression);
+        }
+      } catch (error) {
+        console.error("\u041E\u0448\u0438\u0431\u043A\u0430 \u0440\u0430\u0437\u0431\u043E\u0440\u0430 \u043F\u0440\u0438\u0432\u044F\u0437\u043E\u043A \u0430\u0442\u0440\u0438\u0431\u0443\u0442\u043E\u0432:", error);
+      }
+    });
+  }
+  // Метод для обновления атрибута на основе выражения
+  updateAttribute(element, attributeName, expression) {
+    const context = { ...this.model.store.getState() };
+    let value;
+    if (expression.startsWith("{{") && expression.endsWith("}}")) {
+      const path = expression.substring(2, expression.length - 2).trim();
+      value = this.model.store.get(path);
+    } else {
+      value = this.evaluateExpression(expression, context);
+    }
+    const previousValue = element.getAttribute(attributeName);
+    if (String(value) !== previousValue) {
+      if (value === false || value === null || value === void 0) {
+        element.removeAttribute(attributeName);
+      } else if (value === true) {
+        element.setAttribute(attributeName, "");
+      } else {
+        element.setAttribute(attributeName, String(value));
+      }
+    }
+  }
+  // Вспомогательный метод для извлечения переменных из выражения
+  extractVariables(expression) {
+    const matches = expression.match(/\b[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*\b/g) || [];
+    return [...new Set(matches)];
+  }
+  // Метод для оценки выражения
+  evaluateExpression(expression, context) {
+    try {
+      const func = new Function(...Object.keys(context), `return ${expression}`);
+      return func(...Object.values(context));
+    } catch (error) {
+      console.error("\u041E\u0448\u0438\u0431\u043A\u0430 \u043F\u0440\u0438 \u0432\u044B\u0447\u0438\u0441\u043B\u0435\u043D\u0438\u0438 \u0432\u044B\u0440\u0430\u0436\u0435\u043D\u0438\u044F:", error);
+      return false;
+    }
+  }
+  // Освобождение ресурсов
+  destroy() {
+    this.virtualDom.clear();
   }
 };
 
@@ -831,7 +1163,8 @@ var DOMManager = class {
     this.inputs = [];
     this.domDependencies = /* @__PURE__ */ new Map();
     this.virtualDom = /* @__PURE__ */ new Map();
-    this.loops = /* @__PURE__ */ new Map();
+    this.loopManager = new LoopManager(this, model);
+    this.conditionalManager = new ConditionalManager(this, model);
   }
   // Регистрация зависимости DOM от свойства
   registerDomDependency(propertyPath, domElement, info) {
@@ -843,77 +1176,13 @@ var DOMManager = class {
       ...info
     });
   }
-  // Парсим DOM для поиска циклов (data-for)
-  parseLoops(rootElement) {
-    Logger.debug("Looking for items with data-for...");
-    const loopElements = rootElement.querySelectorAll("[data-for]");
-    Logger.debug("Found items from data-for:", loopElements.length);
-    loopElements.forEach((element, index) => {
-      const expression = element.getAttribute("data-for").trim();
-      Logger.debug(`Element processing ${index}:`, expression);
-      const matches = expression.match(/^\s*(\w+)(?:\s*,\s*(\w+))?\s+in\s+(\w+(?:\.\w+)*)\s*$/);
-      if (!matches) {
-        console.error("Incorrect format of expression data-for:", expression);
-        return;
-      }
-      const [_, itemName, indexName, arrayPath] = matches;
-      Logger.debug("The expression is dismantled:", { itemName, indexName, arrayPath });
-      const array = this.model.store.get(arrayPath);
-      Logger.debug("An array was obtained:", array);
-      if (!Array.isArray(array)) {
-        Logger.error(`The value in the path ${arrayPath} is not an array:`, array);
-        return;
-      }
-      const template = element.cloneNode(true);
-      this.loops.set(element, {
-        template,
-        itemName,
-        indexName,
-        arrayPath,
-        parentNode: element.parentNode
-      });
-      Logger.debug("Update the loop for the item");
-      this.updateLoop(element);
-    });
-  }
-  // Обновляем цикл
-  updateLoop(element) {
-    const loopInfo = this.loops.get(element);
-    if (!loopInfo) {
-      Logger.error("No loop information found for an item");
-      return;
-    }
-    const { template, itemName, indexName, arrayPath, parentNode } = loopInfo;
-    const array = this.model.store.get(arrayPath);
-    Logger.debug("Update loop for array:", array);
-    if (!Array.isArray(array)) {
-      Logger.error("The value is not an array:", array);
-      return;
-    }
-    const generated = parentNode.querySelectorAll(`[data-generated-for="${arrayPath}"]`);
-    generated.forEach((el) => el.remove());
-    array.forEach((item, index) => {
-      const newNode = template.cloneNode(true);
-      newNode.style.display = "";
-      newNode.removeAttribute("data-for");
-      newNode.setAttribute("data-generated-for", arrayPath);
-      this.processTemplateNode(newNode, {
-        [itemName]: item,
-        [indexName || "index"]: index
-      });
-      parentNode.insertBefore(newNode, element);
-    });
-    element.style.display = "none";
-  }
   // Обработка шаблонных узлов
   processTemplateNode(node, context) {
     if (node.nodeType === Node.TEXT_NODE) {
       const originalText = node.textContent;
       const newText = node.textContent.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
         path = path.trim();
-        const value = context && path in context ? context[path] : this.model.store.get(path);
-        Logger.debug("Replacement in the template:", { original: match, path, value });
-        return value;
+        return context && path in context ? context[path] : this.model.store.get(path);
       });
       if (originalText !== newText) {
         node.textContent = newText;
@@ -1026,11 +1295,7 @@ var DOMManager = class {
       }
     });
     if (Array.isArray(value) || isArrayMethodChange) {
-      this.loops.forEach((loopInfo, element) => {
-        if (loopInfo.arrayPath === propertyPath) {
-          this.updateLoop(element);
-        }
-      });
+      this.loopManager.updateLoops(propertyPath, value);
     }
     if (elementsToUpdate.size === 0) return;
     const updates = {
@@ -1045,66 +1310,9 @@ var DOMManager = class {
       }
     });
     updates.template.forEach((dep) => this.updateTemplateNode(dep.element, dep.template));
-    updates.conditional.forEach((dep) => this.updateConditional(dep.element, dep.expression));
-    updates.loop.forEach((dep) => this.updateLoopPart(dep.element, dep.arrayPath, value, dep.index));
-    updates.attribute.forEach((dep) => this.updateAttribute(dep.element, dep.attribute, dep.expression));
-  }
-  // Парсим DOM для поиска условных выражений
-  parseConditionals(rootElement) {
-    const conditionalElements = rootElement.querySelectorAll("[data-if]");
-    conditionalElements.forEach((element) => {
-      const expression = element.getAttribute("data-if").trim();
-      element.__originalDisplay = element.style.display === "none" ? "" : element.style.display;
-      const variables = this.extractVariables(expression);
-      variables.forEach((variable) => {
-        this.registerDomDependency(variable, element, {
-          type: "conditional",
-          expression
-        });
-      });
-      this.updateConditional(element, expression);
-    });
-  }
-  // Обновление условного выражения
-  updateConditional(element, expression) {
-    const currentState = this.virtualDom.get(element);
-    const context = { ...this.model.store.getState() };
-    const result = this.evaluateExpression(expression, context);
-    if (currentState !== result) {
-      element.style.display = result ? element.__originalDisplay || "" : "none";
-      this.virtualDom.set(element, result);
-    }
-  }
-  // Обновление части цикла
-  updateLoopPart(element, arrayPath, changedValue, changedIndex) {
-    const loopInfo = this.loops.get(element);
-    if (!loopInfo) return;
-    const { template, itemName, indexName, parentNode } = loopInfo;
-    const array = this.model.store.get(arrayPath);
-    if (!Array.isArray(array)) return;
-    const generated = Array.from(
-      parentNode.querySelectorAll(`[data-generated-for="${arrayPath}"]`)
-    );
-    if (changedIndex === void 0 || generated.length !== array.length) {
-      return this.updateLoop(element);
-    }
-    const elementToUpdate = generated[changedIndex];
-    if (elementToUpdate) {
-      const newNode = template.cloneNode(true);
-      this.processTemplateNode(newNode, {
-        [itemName]: array[changedIndex],
-        [indexName || "index"]: changedIndex
-      });
-      while (elementToUpdate.firstChild) {
-        elementToUpdate.removeChild(elementToUpdate.firstChild);
-      }
-      while (newNode.firstChild) {
-        elementToUpdate.appendChild(newNode.firstChild);
-      }
-      Array.from(newNode.attributes).forEach((attr) => {
-        elementToUpdate.setAttribute(attr.name, attr.value);
-      });
-    }
+    updates.conditional.forEach((dep) => this.conditionalManager.updateConditional(dep.element, dep.expression));
+    updates.attribute.forEach((dep) => this.conditionalManager.updateAttribute(dep.element, dep.attribute, dep.expression));
+    updates.loop.forEach((dep) => this.loopManager.updateLoopPart(dep.element, dep.arrayPath, value, dep.index));
   }
   // Метод обновления текстового шаблона
   updateTemplateNode(node, template) {
@@ -1115,65 +1323,6 @@ var DOMManager = class {
     if (this.virtualDom.get(node) !== newContent) {
       node.textContent = newContent;
       this.virtualDom.set(node, newContent);
-    }
-  }
-  // Метод для обновления атрибута на основе выражения
-  updateAttribute(element, attributeName, expression) {
-    const context = { ...this.model.store.getState() };
-    let value;
-    if (expression.startsWith("{{") && expression.endsWith("}}")) {
-      const path = expression.substring(2, expression.length - 2).trim();
-      value = this.model.store.get(path);
-    } else {
-      value = this.evaluateExpression(expression, context);
-    }
-    const previousValue = element.getAttribute(attributeName);
-    if (String(value) !== previousValue) {
-      if (value === false || value === null || value === void 0) {
-        element.removeAttribute(attributeName);
-      } else if (value === true) {
-        element.setAttribute(attributeName, "");
-      } else {
-        element.setAttribute(attributeName, String(value));
-      }
-    }
-  }
-  // Парсим DOM для поиска атрибутов с привязками
-  parseAttributes(rootElement) {
-    const elements = rootElement.querySelectorAll("[data-bind]");
-    elements.forEach((element) => {
-      const bindingExpression = element.getAttribute("data-bind");
-      try {
-        const bindings = JSON.parse(bindingExpression.replace(/'/g, '"'));
-        for (const [attributeName, expression] of Object.entries(bindings)) {
-          const variables = this.extractVariables(expression);
-          variables.forEach((variable) => {
-            this.registerDomDependency(variable, element, {
-              type: "attribute",
-              attribute: attributeName,
-              expression
-            });
-          });
-          this.updateAttribute(element, attributeName, expression);
-        }
-      } catch (error) {
-        Logger.error("An error of analysis of attachments:", error);
-      }
-    });
-  }
-  // Вспомогательный метод для извлечения переменных из выражения
-  extractVariables(expression) {
-    const matches = expression.match(/\b[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*\b/g) || [];
-    return [...new Set(matches)];
-  }
-  // Метод для оценки выражения
-  evaluateExpression(expression, context) {
-    try {
-      const func = new Function(...Object.keys(context), `return ${expression}`);
-      return func(...Object.values(context));
-    } catch (error) {
-      Logger.error("Error when evaluating expression:", error);
-      return false;
     }
   }
   // Проверяет, зависит ли путь pathB от пути pathA
@@ -1190,41 +1339,59 @@ var DOMManager = class {
     });
     return dependentPaths;
   }
-  // Оптимизированный метод для обнаружения изменений в массивах
-  detectArrayChanges(newArray, oldArray = []) {
-    const changes = {
-      added: [],
-      removed: [],
-      moved: []
-    };
-    for (let i = 0; i < newArray.length; i++) {
-      const item = newArray[i];
-      const oldIndex = oldArray.findIndex(
-        (oldItem) => JSON.stringify(oldItem) === JSON.stringify(item)
-      );
-      if (oldIndex === -1) {
-        changes.added.push({ index: i, item });
-      } else if (oldIndex !== i) {
-        changes.moved.push({ oldIndex, newIndex: i, item });
-      }
-    }
-    for (let i = 0; i < oldArray.length; i++) {
-      const item = oldArray[i];
-      const newIndex = newArray.findIndex(
-        (newItem) => JSON.stringify(newItem) === JSON.stringify(item)
-      );
-      if (newIndex === -1) {
-        changes.removed.push({ index: i, item });
-      }
-    }
-    return changes;
-  }
   bindDOM(rootElement) {
-    this.parseLoops(rootElement);
-    this.parseConditionals(rootElement);
-    this.parseAttributes(rootElement);
+    this.loopManager.parseLoops(rootElement);
+    this.conditionalManager.parseConditionals(rootElement);
+    this.conditionalManager.parseAttributes(rootElement);
     this.parse(rootElement);
     this.updateAllDOM();
+  }
+  // Добавим метод для валидации и обработки ошибок
+  validateModel() {
+    const errors = [];
+    const warnings = [];
+    for (const key in this.model.computed) {
+      const visited = /* @__PURE__ */ new Set();
+      const cyclePath = this.checkCyclicDependencies(key, visited);
+      if (cyclePath) {
+        errors.push({
+          type: "CYCLIC_DEPENDENCY",
+          property: key,
+          message: `Cyclic dependence is found: ${cyclePath.join(" -> ")}`
+        });
+      }
+    }
+    this.domDependencies.forEach((deps, path) => {
+      if (!this.model.store.isValidPath(path)) {
+        warnings.push({
+          type: "INVALID_PATH",
+          path,
+          message: `Property ${path} used in the template, but does not exist in the model`
+        });
+      }
+    });
+    return { errors, warnings };
+  }
+  // Проверяем наличие циклических зависимостей
+  checkCyclicDependencies(key, visited, path = []) {
+    if (visited.has(key)) {
+      return [...path, key];
+    }
+    visited.add(key);
+    path.push(key);
+    const computed = this.model.computed[key];
+    if (!computed || !computed.dependencies) {
+      return null;
+    }
+    for (const dep of computed.dependencies) {
+      if (dep in this.model.computed) {
+        const cyclePath = this.checkCyclicDependencies(dep, new Set(visited), [...path]);
+        if (cyclePath) {
+          return cyclePath;
+        }
+      }
+    }
+    return null;
   }
   // Освобождение ресурсов
   destroy() {
@@ -1238,7 +1405,8 @@ var DOMManager = class {
     this.inputs = [];
     this.domDependencies.clear();
     this.virtualDom.clear();
-    this.loops.clear();
+    this.loopManager.destroy();
+    this.conditionalManager.destroy();
   }
 };
 
@@ -1299,7 +1467,6 @@ var ComputedProps = class {
         return false;
       });
       if (isDependency) {
-        Logger.debug(`Updating computed property: ${key}`);
         const newValue = this.evaluate(key);
         this.model.dom.updateDOM(key, newValue);
         this.model.dom.updateInputs(key, newValue);
@@ -1307,27 +1474,23 @@ var ComputedProps = class {
     }
   }
   // Допоміжний метод для отримання всіх обчислюваних значень
-  get() {
+  all() {
     return Object.fromEntries(
       Object.entries(this.computed).map(([key, comp]) => [key, comp.value])
     );
   }
 };
 
-// src/model.js
+// src/core/model.js
 var ModelOptions = {
   id: "model",
   memoizeComputed: true
 };
 var Model = class extends event_emitter_default {
   constructor(data = {}, options = {}) {
-    Logger.DEBUG_LEVEL = Logger.DEBUG_LEVELS.DEBUG;
-    Logger.debug("Model initialization with data:", data);
     super();
     this.options = Object.assign({}, ModelOptions, options);
     this.computed = {};
-    this.events = /* @__PURE__ */ new Map();
-    this.autoSaveInterval = null;
     for (const key in data) {
       if (typeof data[key] === "function") {
         this.computed[key] = {
@@ -1383,88 +1546,7 @@ var Model = class extends event_emitter_default {
   initDevTools(options = {}) {
     return new dev_tools_default(this, options);
   }
-  // Специализированные методы для массивов
-  // Пример использования:
-  // model.applyArrayChanges('users', (users) => users.push({ name: 'Новый пользователь' }));
-  applyArrayChanges(arrayPath, callback) {
-    const array = this.store.get(arrayPath);
-    if (!Array.isArray(array)) {
-      Logger.error(`The path ${arrayPath} is not an array!`);
-      return false;
-    }
-    this.batchProcessing = true;
-    let result;
-    try {
-      result = callback(array);
-      this.loops.forEach((loopInfo, element) => {
-        if (loopInfo.arrayPath === arrayPath) {
-          this.updateLoop(element);
-        }
-      });
-    } finally {
-      this.batchProcessing = false;
-      this.updateAllDOM();
-    }
-    return result;
-  }
-  // Добавим метод для валидации и обработки ошибок
-  validateModel() {
-    const errors = [];
-    const warnings = [];
-    for (const key in this.computed) {
-      const visited = /* @__PURE__ */ new Set();
-      const cyclePath = this.checkCyclicDependencies(key, visited);
-      if (cyclePath) {
-        errors.push({
-          type: "CYCLIC_DEPENDENCY",
-          property: key,
-          message: `Cyclic dependence is found: ${cyclePath.join(" -> ")}`
-        });
-      }
-    }
-    this.domDependencies.forEach((deps, path) => {
-      if (!this.isValidPath(path)) {
-        warnings.push({
-          type: "INVALID_PATH",
-          path,
-          message: `Property ${path} used in the template, but does not exist in the model`
-        });
-      }
-    });
-    return { errors, warnings };
-  }
-  // Проверяем наличие циклических зависимостей
-  checkCyclicDependencies(key, visited, path = []) {
-    if (visited.has(key)) {
-      return [...path, key];
-    }
-    visited.add(key);
-    path.push(key);
-    const computed = this.computed[key];
-    if (!computed || !computed.dependencies) {
-      return null;
-    }
-    for (const dep of computed.dependencies) {
-      if (dep in this.computed) {
-        const cyclePath = this.checkCyclicDependencies(dep, new Set(visited), [...path]);
-        if (cyclePath) {
-          return cyclePath;
-        }
-      }
-    }
-    return null;
-  }
-  // Проверка существования пути в модели
-  isValidPath(path) {
-    try {
-      const value = this.store.get(path);
-      return value !== void 0;
-    } catch (e) {
-      return false;
-    }
-  }
   destroy() {
-    this.events.clear();
     this.dom.destroy();
     this.store.destroy();
     this.emit("destroy");
@@ -1474,7 +1556,7 @@ var model_default = Model;
 
 // src/index.js
 var version = "0.11.0";
-var build_time = "03.03.2025, 08:22:35";
+var build_time = "03.03.2025, 11:28:57";
 model_default.info = () => {
   console.info(`%c Model %c v${version} %c ${build_time} `, "color: white; font-weight: bold; background: #0080fe", "color: white; background: darkgreen", "color: white; background: #0080fe;");
 };

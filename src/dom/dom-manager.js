@@ -1,5 +1,5 @@
 import LoopManager from "./loop-manager.js";
-import ComputedManager from "./computed-manager.js";
+import ConditionalManager from "./conditional-manager.js";
 
 export default class DOMManager {
     constructor(model) {
@@ -10,7 +10,7 @@ export default class DOMManager {
         this.virtualDom = new Map();
         
         this.loopManager = new LoopManager(this, model);
-        this.computedManager = new ComputedManager(this, model);
+        this.conditionalManager = new ConditionalManager(this, model);
     }
 
     // Регистрация зависимости DOM от свойства
@@ -210,8 +210,8 @@ export default class DOMManager {
 
         // Обрабатываем по группам
         updates.template.forEach(dep => this.updateTemplateNode(dep.element, dep.template));
-        updates.conditional.forEach(dep => this.computedManager.updateConditional(dep.element, dep.expression));
-        updates.attribute.forEach(dep => this.computedManager.updateAttribute(dep.element, dep.attribute, dep.expression));
+        updates.conditional.forEach(dep => this.conditionalManager.updateConditional(dep.element, dep.expression));
+        updates.attribute.forEach(dep => this.conditionalManager.updateAttribute(dep.element, dep.attribute, dep.expression));
         updates.loop.forEach(dep => this.loopManager.updateLoopPart(dep.element, dep.arrayPath, value, dep.index));
     }
     
@@ -249,12 +249,70 @@ export default class DOMManager {
     
     bindDOM(rootElement){
         this.loopManager.parseLoops(rootElement);
-        this.computedManager.parseConditionals(rootElement);
-        this.computedManager.parseAttributes(rootElement);
+        this.conditionalManager.parseConditionals(rootElement);
+        this.conditionalManager.parseAttributes(rootElement);
         this.parse(rootElement);
         this.updateAllDOM();
     }
-    
+
+    // Добавим метод для валидации и обработки ошибок
+    validateModel() {
+        const errors = [];
+        const warnings = [];
+
+        // Проверяем наличие циклических зависимостей в computed свойствах
+        for (const key in this.model.computed) {
+            const visited = new Set();
+            const cyclePath = this.checkCyclicDependencies(key, visited);
+            if (cyclePath) {
+                errors.push({
+                    type: 'CYCLIC_DEPENDENCY',
+                    property: key,
+                    message: `Cyclic dependence is found: ${cyclePath.join(' -> ')}`
+                });
+            }
+        }
+
+        // Проверка на невалидные выражения в шаблонах
+        this.domDependencies.forEach((deps, path) => {
+            if (!this.model.store.isValidPath(path)) {
+                warnings.push({
+                    type: 'INVALID_PATH',
+                    path,
+                    message: `Property ${path} used in the template, but does not exist in the model`
+                });
+            }
+        });
+
+        return { errors, warnings };
+    }
+
+    // Проверяем наличие циклических зависимостей
+    checkCyclicDependencies(key, visited, path = []) {
+        if (visited.has(key)) {
+            return [...path, key];
+        }
+
+        visited.add(key);
+        path.push(key);
+
+        const computed = this.model.computed[key];
+        if (!computed || !computed.dependencies) {
+            return null;
+        }
+
+        for (const dep of computed.dependencies) {
+            if (dep in this.model.computed) {
+                const cyclePath = this.checkCyclicDependencies(dep, new Set(visited), [...path]);
+                if (cyclePath) {
+                    return cyclePath;
+                }
+            }
+        }
+
+        return null;
+    }
+
     // Освобождение ресурсов
     destroy() {
         // Удаляем обработчики событий с инпутов
@@ -272,6 +330,6 @@ export default class DOMManager {
         this.virtualDom.clear();
         
         this.loopManager.destroy();
-        this.computedManager.destroy();
+        this.conditionalManager.destroy();
     }
 }

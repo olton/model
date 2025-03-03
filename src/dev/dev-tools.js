@@ -1,133 +1,4 @@
-const DevToolsWindowStyle = `
-    <style>
-        #model-devtools-panel  { 
-            position: fixed;
-            bottom: 0;
-            right: 0;
-            width: 300px;
-            height: 400px;
-            background: #242424;
-            color: #fff;
-            border: 1px solid #333;
-            z-index: 9999;
-            font-family: monospace;
-            
-            *::-webkit-scrollbar {
-              width: 10px;
-            }
-            
-            * {
-              scrollbar-width: thin;
-            }
-            
-            .devtools-section {
-                padding: 8px;
-                margin: 4px;
-                border: 1px solid #444;
-                cursor: pointer;
-                hover: background-color: #333;
-                font-size: 12px;
-            }
-            
-            h3 {
-                margin: 0;
-                font-size: 14px;
-                border-bottom: 1px solid #333;
-                padding-bottom: 4px;
-            }
-        }
-        
-        #model-dev-tools-toggle-button {
-            position: fixed;
-            bottom: 10px;
-            right: 10px;
-            z-index: 9998;
-            padding: 5px 10px;
-            background: #444;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }        
-
-        #model-devtools-time-travel-dialog {
-            position: fixed;
-            bottom: 0;
-            right: 304px;
-            background: #2a2a2a;
-            border: 1px solid #444;
-            border-radius: 4px;
-            height: 400px;
-            width: 300px;
-            z-index: 10000;
-            color: #fff;
-            font-family: monospace;
-            
-            *::-webkit-scrollbar {
-              width: 10px;
-            }
-            
-            * {
-              scrollbar-width: thin;
-            }
-            
-            .time-travel-items {
-                padding: 4px; 
-                height: calc(100% - 35px); 
-                overflow: auto;
-                position: relative;
-            }
-            
-            .time-travel-item {
-                padding: 8px;
-                margin: 4px;
-                border: 1px solid #444;
-                cursor: pointer;
-                hover: background-color: #333;
-                font-size: 12px;
-                
-                button {
-                    margin-top: 8px;
-                    background: dodgerblue;
-                }
-            }
-        }
-        
-        #model-devtools-panel, #model-devtools-time-travel-dialog {
-            button {
-                height: 20px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 12px;
-                border-radius: 4px;
-                border: 1px solid #444;
-                background: #333;
-                color: #fff;
-                cursor: pointer;
-                
-                @media (hover: hover) {
-                    &:hover {
-                        background: #444;
-                    }
-                }
-
-                @media (hover: none) {
-                    &:hover {
-                        background: #444;
-                    }
-                }
-            }        
-        }
-        
-        .dev-tools-header {
-            padding: 8px; 
-            border-bottom: 1px solid #333; 
-            display: flex; 
-            justify-content: space-between;
-        }
-    </style>
-`
+import DevToolsWindowStyle from './dev-tools.style.js';
 
 class ModelDevTools {
     constructor(model, options = {}) {
@@ -146,13 +17,13 @@ class ModelDevTools {
     }
 
     initializeDevTools() {
-        // Створюємо глобальний об'єкт для доступу з консолі
+        // Создаем глобальный объект для доступа из консоли
         window.__MODEL_DEVTOOLS__ = this;
 
-        // Додаємо панель DevTools
+        // Добавляем панель DevTools
         this.createDevToolsPanel();
 
-        // Підписуємося на події моделі
+        // Подписываемся на события модели
         this.setupModelListeners();
     }
 
@@ -183,31 +54,35 @@ class ModelDevTools {
 
         panel.appendChild(header);
         panel.appendChild(content);
-        
+
         document.body.appendChild(panel);
 
-        // Додаємо кнопку для відкриття панелі
+        // Добавляем кнопку для открытия панели
         this.createToggleButton();
-        
+
         document.getElementById('devtools-close').onclick = () => this.togglePanel();
         document.getElementById('devtools-time-travel').onclick = () => this.showTimeTravelDialog();
     }
 
     showTimeTravelDialog() {
-        // Створюємо діалог для time travel
+        // Создаем диалог для time travel
         let dialog = document.getElementById('model-devtools-time-travel-dialog');
         if (!dialog) {
             dialog = document.createElement('div');
             dialog.id = "model-devtools-time-travel-dialog";
         }
 
-        // Формуємо список станів
+        // Формируем список состояний
         const statesList = [...this.history].reverse().map((snapshot, index) => `
             <div class="time-travel-item">
                 <div>Time: ${new Date(snapshot.timestamp).toLocaleTimeString()}</div>
                 <div>Type: ${snapshot.type}</div>
                 <div>Property: ${snapshot.property || snapshot.event || snapshot.path || ''}</div>
-                <div>Value: ${snapshot.type === "computed-update" ? snapshot.newValue : snapshot.oldValue + " -> " + snapshot.newValue}</div>
+                <div>Value: ${snapshot.type === "computed-update" ? snapshot.newValue :
+            typeof snapshot.oldValue !== 'undefined' && typeof snapshot.newValue !== 'undefined' ?
+                `${JSON.stringify(snapshot.oldValue)} -> ${JSON.stringify(snapshot.newValue)}` :
+                JSON.stringify(snapshot.newValue || snapshot.value || '')}</div>
+                <button style="display: none" onclick="window.__MODEL_DEVTOOLS__.timeTravel(${this.history.length - 1 - index})">Apply this state</button>
             </div>
         `).join('');
 
@@ -220,12 +95,6 @@ class ModelDevTools {
         `;
 
         document.body.appendChild(dialog);
-        
-        if (!statesList) {
-            setTimeout(() => {
-                //dialog.remove();
-            }, 2000)
-        } 
     }
 
     createToggleButton() {
@@ -238,22 +107,22 @@ class ModelDevTools {
     }
 
     setupModelListeners() {
-        // Відстеження змін даних
-        this.model.on('change', ({ property, oldValue, newValue }) => {
+        // Отслеживание изменений данных
+        this.model.store.on('change', (data) => {
             this.logChange({
                 type: 'data-change',
-                property,
-                oldValue,
-                newValue,
+                path: data.path,
+                oldValue: data.oldValue,
+                newValue: data.newValue,
                 timestamp: Date.now()
             });
         });
 
-        // Відстеження подій
-        this.model.on('*', (eventName, data) => {
-            if (eventName !== 'change' && eventName !== 'compute') {
+        // Отслеживание событий от хранилища
+        this.model.store.on('*', (eventName, data) => {
+            if (eventName !== 'change' && eventName !== 'compute' && eventName !== 'arrayChange') {
                 this.logChange({
-                    type: 'event',
+                    type: 'store-event',
                     event: eventName,
                     data,
                     timestamp: Date.now()
@@ -261,95 +130,70 @@ class ModelDevTools {
             }
         });
 
-        // Відстеження обчислюваних властивостей
-        this.model.on('compute', ({ key, value }) => {
+        // Отслеживание событий модели
+        this.model.on('*', (eventName, data) => {
+            if (eventName !== 'change' && eventName !== 'compute') {
+                this.logChange({
+                    type: 'model-event',
+                    event: eventName,
+                    data,
+                    timestamp: Date.now()
+                });
+            }
+        });
+
+        // Отслеживание вычисляемых свойств
+        this.model.store.on('compute', (data) => {
             this.logChange({
                 type: 'computed-update',
-                property: key,
-                newValue: value,
+                property: data.key,
+                dependencies: Array.from(data.dependencies),
+                newValue: data.value,
                 timestamp: Date.now()
             });
         });
 
-        this.setupArrayObserver();
-    }
-
-    setupArrayObserver() {
-        const arrayMethods = ['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse'];
-
-        const observeArray = (array, path) => {
-            arrayMethods.forEach(method => {
-                const original = array[method];
-                array[method] = (...args) => {
-                    const oldValue = [...array];
-                    const result = original.apply(array, args);
-
-                    this.logChange({
-                        type: 'array-operation',
-                        path,
-                        method,
-                        args,
-                        oldValue,
-                        newValue: [...array],
-                        timestamp: Date.now()
-                    });
-
-                    return result;
-                };
+        // Отслеживание изменений массивов
+        this.model.store.on('arrayChange', (data) => {
+            this.logChange({
+                type: 'array-operation',
+                path: data.path,
+                method: data.method,
+                args: data.args,
+                oldValue: data.oldValue,
+                newValue: data.newValue,
+                timestamp: Date.now()
             });
-        };
-
-        // Рекурсивно знаходимо та спостерігаємо за всіма масивами в моделі
-        const findAndObserveArrays = (obj, parentPath = '') => {
-            for (const [key, value] of Object.entries(obj)) {
-                const currentPath = parentPath ? `${parentPath}.${key}` : key;
-
-                if (Array.isArray(value)) {
-                    observeArray(value, currentPath);
-                    // Також перевіряємо елементи масиву на наявність вкладених масивів
-                    value.forEach((item, index) => {
-                        if (typeof item === 'object' && item !== null) {
-                            findAndObserveArrays(item, `${currentPath}[${index}]`);
-                        }
-                    });
-                } else if (typeof value === 'object' && value !== null) {
-                    findAndObserveArrays(value, currentPath);
-                }
-            }
-        };
-
-        findAndObserveArrays(this.model.data);
+        });
     }
 
     logChange(entry) {
         if (!this.options.enabled) return;
 
-        // Зберігаємо знімок стану
+        // Сохраняем снимок состояния
         if (this.options.timeTravel) {
             this.saveSnapshot(entry);
         }
 
-        // Оновлюємо відображення
+        // Обновляем отображение
         this.updateDisplay();
     }
 
     saveSnapshot(entry) {
-        // Створюємо знімок поточного стану
+        // Создаем снимок текущего состояния
         const snapshot = {
             ...entry,
             state: JSON.parse(JSON.stringify(this.model.data)),
-            computed: Object.fromEntries(
-                Object.entries(this.model.computed)
-                    .map(([key, comp]) => [key, comp.value])
-            )
+            // Получаем все вычисляемые свойства
+            computed: this.getComputedValues()
         };
 
-        // Додаємо до історії
+        // Добавляем в историю
         this.history = this.history.slice(0, this.currentIndex + 1);
         this.history.push(snapshot);
         this.currentIndex++;
 
-        // Обмежуємо кількість знімків
+        // Ограничиваем количество снимков
         if (this.history.length > this.options.maxSnapshots) {
             this.history.shift();
             this.currentIndex--;
@@ -361,57 +205,111 @@ class ModelDevTools {
         if (!content) return;
 
         const formatValue = (value) => {
-            if (Array.isArray(value)) {
-                return `Array(${value.length}) ${JSON.stringify(value, null, 2)}`;
+            if (value === undefined) return 'undefined';
+            if (value === null) return 'null';
+
+            try {
+                if (Array.isArray(value)) {
+                    return `Array(${value.length}) ${JSON.stringify(value, null, 2)}`;
+                }
+                return JSON.stringify(value, null, 2);
+            } catch (e) {
+                return String(value);
             }
-            return JSON.stringify(value, null, 2);
         };
 
-        const recentChanges = this.getRecentChanges().map(change => {
-            if (change.type === 'array-operation') {
-                return {
-                    ...change,
-                    description: `${change.path}.${change.method}(${change.args.map(arg =>
-                        JSON.stringify(arg)).join(', ')})`
-                };
-            }
-            return change;
-        });
-        
-        let changes= ``;
+        const recentChanges = this.getRecentChanges();
+        let changes = ``;
+
         for (const change of recentChanges) {
+            let changeContent;
+
+            try {
+                // Форматируем timestamp для лучшего отображения
+                const formattedChange = {
+                    ...change,
+                    timestamp: new Date(change.timestamp).toLocaleTimeString()
+                };
+                changeContent = JSON.stringify(formattedChange, null, 2);
+            } catch (e) {
+                changeContent = `Error formatting change: ${e.message}`;
+            }
+
             changes += `
-                <div style="border-bottom: 1px solid #444; padding-bottom: 8px; overflow-x: auto">
-                    <pre>${JSON.stringify({...change, timestamp: new Date(change.timestamp).toLocaleTimeString()}, null, 2)}</pre>
-                </div>\n`;
+            <div style="border-bottom: 1px solid #444; padding-bottom: 8px; overflow-x: auto">
+                <pre>${changeContent}</pre>
+            </div>\n`;
         }
-        
+
+        // Получаем текущие вычисляемые значения
+        const computedValues = this.getComputedValues();
+
         content.innerHTML = `
-            <div class="devtools-section">
-                <h3>Current State:</h3>
-                <pre>${formatValue(this.model.data)}</pre>
-            </div>
-            <div class="devtools-section">
-                <h3>Computed Values:</h3>
-                <pre>${formatValue(this.getComputedValues())}</pre>
-            </div>
-            <div class="devtools-section">
-                <h3>Recent Changes:</h3>
-                ${changes}
-            </div>
-        `;
-        
+        <div class="devtools-section">
+            <h3>Current State:</h3>
+            <pre>${formatValue(this.model.data)}</pre>
+        </div>
+        <div class="devtools-section">
+            <h3>Computed Values:</h3>
+            <pre>${formatValue(computedValues)}</pre>
+        </div>
+        <div class="devtools-section">
+            <h3>DOM Dependencies:</h3>
+            <pre>${this.formatDOMDependencies()}</pre>
+        </div>
+        <div class="devtools-section">
+            <h3>Recent Changes:</h3>
+            ${changes}
+        </div>
+    `;
+
         const timeTravelDialog = document.getElementById('model-devtools-time-travel-dialog');
         if (timeTravelDialog) {
             this.showTimeTravelDialog();
         }
     }
 
+    formatDOMDependencies() {
+        try {
+            const dependencies = {};
+            this.model.dom.domDependencies.forEach((value, key) => {
+                dependencies[key] = Array.from(value).map(dep => ({
+                    type: dep.type,
+                    element: dep.element.tagName
+                }));
+            });
+            return JSON.stringify(dependencies, null, 2);
+        } catch (e) {
+            return `Error formatting DOM dependencies: ${e.message}`;
+        }
+    }
+
     getComputedValues() {
-        return Object.fromEntries(
-            Object.entries(this.model.computed)
-                .map(([key, comp]) => [key, comp.value])
-        );
+        // Проверяем, есть ли объект computed и метод getAll или get
+        if (!this.model.computed) return {};
+
+        if (typeof this.model.computed.all === 'function') {
+            return this.model.computed.all();
+        }
+
+        // Если нет конкретного метода, пробуем получить свойства через итерацию
+        if (this.model.computed.keys && Array.isArray(this.model.computed.keys)) {
+            const result = {};
+            for (const key of this.model.computed.keys) {
+                result[key] = this.model.computed.getValue(key);
+            }
+            return result;
+        }
+
+        // Если всё еще нет данных, пытаемся получить значения из this.model.data
+        const computedValues = {};
+        for (const key in this.model.data) {
+            if (this.model.computed && typeof this.model.computed[key] !== 'undefined') {
+                computedValues[key] = this.model.data[key];
+            }
+        }
+
+        return computedValues;
     }
 
     getRecentChanges() {
@@ -425,30 +323,69 @@ class ModelDevTools {
         }
     }
 
-    // API для консолі розробника
+    // API для консоли разработчика
     inspect(path) {
-        return this.model.getValueByPath(path);
+        return this.model.store.get(path);
     }
 
     timeTravel(index) {
-        if (!this.options.timeTravel) return;
+        if (!this.options.timeTravel || true) return;
         if (index < 0 || index >= this.history.length) return;
 
         const snapshot = this.history[index];
-        this.model.loadStateFromSnapshot(snapshot.state);
-        this.currentIndex = index;
+
+        try {
+            // Временно отключаем слушатели, чтобы избежать циклов
+            const origEnabled = this.options.enabled;
+            this.options.enabled = false;
+
+            // Загружаем состояние из снапшота
+            this.model.store.setState(snapshot.state);
+
+            // Обновляем значения вычисляемых свойств
+            if (this.model.computed) {
+                // Проверяем наличие метода recompute для всех свойств
+                if (typeof this.model.computed.recomputeAll === 'function') {
+                    this.model.computed.recomputeAll();
+                } else {
+                    // Если recomputeAll отсутствует, пробуем обновить каждое свойство
+                    for (const key in snapshot.computed) {
+                        if (typeof this.model.computed.evaluate === 'function') {
+                            this.model.computed.evaluate(key, true);
+                        } else if (typeof this.model.computed.recompute === 'function') {
+                            this.model.computed.recompute(key);
+                        }
+                    }
+                }
+            }
+
+            // Обновляем DOM
+            this.model.dom.updateAllDOM();
+
+            this.currentIndex = index;
+            this.options.enabled = origEnabled;
+
+            console.log(`Time traveled to snapshot ${index}`, snapshot);
+        } catch (e) {
+            console.error('Error during time travel:', e);
+        }
     }
 
-    // Методи для аналізу продуктивності
+    // Методы для анализа производительности
     startPerfMonitoring() {
         this.perfMetrics = {
             updates: 0,
             computations: 0,
+            domUpdates: 0,
             startTime: Date.now()
         };
 
-        this.model.on('*', () => {
+        this.model.store.on('change', () => {
             this.perfMetrics.updates++;
+        });
+
+        this.model.store.on('compute', () => {
+            this.perfMetrics.computations++;
         });
     }
 
@@ -457,7 +394,8 @@ class ModelDevTools {
         return {
             totalUpdates: this.perfMetrics.updates,
             updatesPerSecond: this.perfMetrics.updates / duration,
-            computationsPerSecond: this.perfMetrics.computations / duration
+            computationsPerSecond: this.perfMetrics.computations / duration,
+            domUpdatesPerSecond: this.perfMetrics.domUpdates / duration
         };
     }
 }

@@ -317,7 +317,6 @@ export default class ReactiveStore extends EventEmitter {
         return result
     }
 
-
     // Метод для спостереження за змінами
     watch(path, callback) {
         if (!this.watchers.has(path)) {
@@ -433,7 +432,17 @@ export default class ReactiveStore extends EventEmitter {
         }
         this.formatters.set(propertyPath, formatter);
     }
-    
+
+    // Проверка существования пути в модели
+    isValidPath(path) {
+        try {
+            const value = this.get(path);
+            return value !== undefined;
+        } catch (e) {
+            return false;
+        }
+    }
+
     destroy() {
         this.state = null;
         this.watchers.clear();
