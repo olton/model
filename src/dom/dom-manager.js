@@ -1,5 +1,6 @@
 import LoopManager from "./loop-manager.js";
 import ConditionalManager from "./conditional-manager.js";
+import AttributeManager from "./attribute-manager.js";
 
 export default class DOMManager {
     constructor(model) {
@@ -11,6 +12,7 @@ export default class DOMManager {
         
         this.loopManager = new LoopManager(this, model);
         this.conditionalManager = new ConditionalManager(this, model);
+        this.attributeManager = new AttributeManager(this, model);
     }
 
     // Регистрация зависимости DOM от свойства
@@ -179,6 +181,14 @@ export default class DOMManager {
             }
         }
 
+        // Обновляем условные элементы
+        const conditionalElements = this.conditionalManager.getDependenciesByPath(propertyPath);
+        conditionalElements.forEach(dep => {
+            if (dep.type === 'if') {
+                this.conditionalManager.updateConditional(dep.element, dep.expression);
+            }
+        });
+
         // Обновляем элементы, зависящие от дочерних путей
         // Например, если изменяется user, обновляем зависимости от user.name, user.address и т.д.
         this.domDependencies.forEach((deps, path) => {
@@ -211,7 +221,7 @@ export default class DOMManager {
         // Обрабатываем по группам
         updates.template.forEach(dep => this.updateTemplateNode(dep.element, dep.template));
         updates.conditional.forEach(dep => this.conditionalManager.updateConditional(dep.element, dep.expression));
-        updates.attribute.forEach(dep => this.conditionalManager.updateAttribute(dep.element, dep.attribute, dep.expression));
+        updates.attribute.forEach(dep => this.attributeManager.updateAttribute(dep.element, dep.attribute, dep.expression));
         updates.loop.forEach(dep => this.loopManager.updateLoopPart(dep.element, dep.arrayPath, value, dep.index));
     }
     
@@ -250,7 +260,7 @@ export default class DOMManager {
     bindDOM(rootElement){
         this.loopManager.parseLoops(rootElement);
         this.conditionalManager.parseConditionals(rootElement);
-        this.conditionalManager.parseAttributes(rootElement);
+        this.attributeManager.parseAttributes(rootElement);
         this.parse(rootElement);
         this.updateAllDOM();
     }

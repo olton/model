@@ -29,9 +29,9 @@ class Model extends EventEmitter {
             }
         }
 
-        this.dom = new DOMManager(this)
         this.store = new ReactiveStore(data);
         this.data = this.store.state;
+        this.dom = new DOMManager(this)
         this.computedProps = new ComputedProps(this, this.computed);
         this.subscribe();
         this.computedProps.init();

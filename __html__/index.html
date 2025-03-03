@@ -41,7 +41,11 @@
     <div data-if="counter > 0">Лічильник більший за нуль</div>
     <div data-if="counter < 0">Лічильник менший за нуль</div>
     <div data-if="counter === 0">Лічильник дорівнює нулю</div>
-
+    <hr/>
+    <div data-if="counter > 0">Положительное число</div>
+    <div data-else-if="counter < 0">Отрицательное число</div>
+    <div data-else>Ноль</div>
+    <hr/>
     <div class="m-2 d-flex flex-row gap-2">
         <button onclick="updateCounter('+')">+</button>
         <button onclick="updateCounter('-')">-</button>

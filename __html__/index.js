@@ -1,7 +1,7 @@
 import Model from "../src/index.js";
 Model.info()
 const app = new Model({
-    counter: 0,
+    counter: 10,
     status() {
         return this.counter === 0 ? "Zero" : this.counter > 0 ? "Positive" : "Negative";
     },
