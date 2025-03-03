@@ -1,3 +1,5 @@
+import EventEmitter from "../event-emitter/event-emitter.js";
+
 /**
  * A utility class for managing application state with localStorage support.
  *
@@ -7,7 +9,7 @@
  *
  * @class StateManager
  */
-export default class StateManager {
+export default class StateManager extends EventEmitter {
     /**
      * Creates a new StateManager instance.
      * @param {Object} store - The store object to manage state for.
@@ -15,6 +17,7 @@ export default class StateManager {
      * @param {string} [options.id="model"] - Unique identifier for the state in localStorage.
      */
     constructor(store, options = {}) {
+        super();
         this.store = store;
         this.options = Object.assign({id: "model"}, options);
     }
@@ -50,9 +53,11 @@ export default class StateManager {
         };
         try {
             localStorage.setItem(this.options.id, JSON.stringify(state));
+            this.emit('saveState', state);
             return state;
         } catch (error) {
             console.error('Error saving state:', error);
+            this.emit('saveStateError', error);
             return null;
         }
     }
@@ -66,13 +71,17 @@ export default class StateManager {
             console.warn('localStorage is not available');
             return null;
         }
-        const savedState = localStorage.getItem(this.options.id);
-        if (savedState) {
-            const parsed = JSON.parse(savedState);
-            Object.assign(this.store.state, parsed.data);
-            return parsed;
+        try {
+            const savedState = localStorage.getItem(this.options.id);
+            if (savedState) {
+                const parsed = JSON.parse(savedState);
+                Object.assign(this.store.state, parsed.data);
+                this.emit('restoreState', parsed);
+                return parsed;
+            }
+        } catch (error) {
+            this.emit('restoreStateError', error);
         }
-        return null;
     }
 
     /**
@@ -85,10 +94,12 @@ export default class StateManager {
             return null;
         }
         const dataToSave = JSON.parse(JSON.stringify(this.store.getState()));
-        return {
+        const snapshot = {
             data: dataToSave,
             timestamp: Date.now()
         };
+        this.emit('createSnapshot', snapshot);
+        return snapshot
     }
 
     /**
@@ -103,6 +114,7 @@ export default class StateManager {
         }
         if (snapshot) {
             Object.assign(this.store.state, snapshot.data);
+            this.emit('restoreSnapshot', snapshot);
             return snapshot;
         }
         return null;

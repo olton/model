@@ -210,6 +210,14 @@ export default class ReactiveStore extends EventEmitter {
 
                         this.middleware.process(context).then(() => {
                             if (!context.preventDefault) {
+                                this.emit('arrayChange', {
+                                    path,
+                                    method: prop,
+                                    args,
+                                    oldValue: oldValue,
+                                    newValue: target
+                                });
+
                                 // Емітимо подію про зміну
                                 this.emit('change', {
                                     path,
@@ -286,6 +294,14 @@ export default class ReactiveStore extends EventEmitter {
 
                 this.middleware.process(context).then(() => {
                     if (!context.preventDefault) {
+                        this.emit('arrayChange', {
+                            path: fullPath,
+                            method: null,
+                            args: null,
+                            oldValue: oldValue,
+                            newValue: value
+                        });
+
                         this.emit('change', {
                             path: fullPath,
                             oldValue,
@@ -373,6 +389,14 @@ export default class ReactiveStore extends EventEmitter {
 
         const oldArray = [...array];
         const result = callback(array);
+
+        this.emit('arrayChange', {
+            path,
+            method: 'custom',
+            args: null,
+            oldValue: oldArray,
+            newValue: [...array]
+        });
 
         this.emit('change', {
             path,
@@ -520,7 +544,7 @@ export default class ReactiveStore extends EventEmitter {
             });
         }
 
-        this.emit('batchUpdate', {
+        this.emit('batchComplete', {
             previousState: this.previousState,
             currentState: this.state
         });

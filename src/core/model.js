@@ -64,7 +64,19 @@ class Model extends EventEmitter {
             this.dom.updateDOM(data.path, data.newValue);
             this.dom.updateInputs(data.path, data.newValue);
             this.computedProps.update(data.path);
+            
+            this.emit("change", data);
         });
+        this.store.on("compute", (data) => this.emit("compute", data))
+        this.store.on("arrayChange", (data) => this.emit("arrayChange", data))
+        this.store.on("batchComplete", (data) => this.emit("batchComplete", data))
+        
+        this.stateManager.on("saveState", (data) => this.emit("saveState", data))
+        this.stateManager.on("saveStateError", (error) => this.emit("saveStateError", error))
+        this.stateManager.on("restoreState", (data) => this.emit("restoreState", data))
+        this.stateManager.on("restoreStateError", (error) => this.emit("restoreStateError", error))
+        this.stateManager.on("createSnapshot", (data) => this.emit("createSnapshot", data))
+        this.stateManager.on("restoreSnapshot", (data) => this.emit("restoreSnapshot", data))
     }
 
     /**
@@ -102,6 +114,28 @@ class Model extends EventEmitter {
         this.store.watch(path, callback);
     }
 
+    /**
+     * Executes a batch of state changes in a single update cycle.
+     * @param callback
+     */
+    batch(callback) {
+        return this.store.batch(callback);
+    }
+
+    /**
+     * Detects changes between two arrays and returns the differences.
+     * @param newArray
+     * @param oldArray
+     * @returns {{added: [], removed: [], moved: []}}
+     */
+    diffArrays(newArray, oldArray) {
+        return this.store.detectArrayChanges(newArray, oldArray);
+    }
+    
+    diff(){
+        // Not implemented yet
+    }
+    
     /**
      * Initializes the DOM bindings for the model.
      * @param {string|HTMLElement} selector - Selector or root element to bind on.
@@ -179,10 +213,11 @@ class Model extends EventEmitter {
      * @throws {Error} If a plugin with the same name is already registered.
      */
     static registerPlugin(name, plugin) {
-        if (this.plugins.has(name)) {
+        if (Model.plugins.has(name)) {
             throw new Error(`Plugin ${name} already registered`);
         }
-        this.plugins.set(name, plugin);
+        Model.plugins.set(name, plugin);
+        this.emit('pluginRegistered', name);
     }
 
     /**
@@ -200,6 +235,17 @@ class Model extends EventEmitter {
         return this;
     }
 
+    /**
+     * Removes a registered plugin by name.
+     * @param name
+     */
+    static removePlugin(name) {
+        if (Model.plugins.has(name)) {
+            Model.plugins.delete(name);
+            this.emit('pluginUnregistered', name);
+        }
+    }
+    
     /**
      * Destroys the model instance and cleans up resources.
      */

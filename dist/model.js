@@ -1,7 +1,7 @@
 
 /*!
- * Model v0.12.0
- * Build: 03.03.2025, 23:16:56
+ * Model v0.13.0
+ * Build: 04.03.2025, 00:33:37
  * Copyright 2012-2025 by Serhii Pimenov
  * Licensed under MIT
  */
@@ -873,6 +873,13 @@ var ReactiveStore = class extends event_emitter_default {
             };
             this.middleware.process(context).then(() => {
               if (!context.preventDefault) {
+                this.emit("arrayChange", {
+                  path,
+                  method: prop,
+                  args,
+                  oldValue,
+                  newValue: target
+                });
                 this.emit("change", {
                   path,
                   oldValue,
@@ -931,6 +938,13 @@ var ReactiveStore = class extends event_emitter_default {
         target[prop] = value;
         this.middleware.process(context).then(() => {
           if (!context.preventDefault) {
+            this.emit("arrayChange", {
+              path: fullPath,
+              method: null,
+              args: null,
+              oldValue,
+              newValue: value
+            });
             this.emit("change", {
               path: fullPath,
               oldValue,
@@ -1005,6 +1019,13 @@ var ReactiveStore = class extends event_emitter_default {
     }
     const oldArray = [...array];
     const result = callback(array);
+    this.emit("arrayChange", {
+      path,
+      method: "custom",
+      args: null,
+      oldValue: oldArray,
+      newValue: [...array]
+    });
     this.emit("change", {
       path,
       oldValue: oldArray,
@@ -1131,7 +1152,7 @@ var ReactiveStore = class extends event_emitter_default {
         this.set(path, value);
       });
     }
-    this.emit("batchUpdate", {
+    this.emit("batchComplete", {
       previousState: this.previousState,
       currentState: this.state
     });
@@ -2706,7 +2727,7 @@ var ComputedProps = class {
 };
 
 // src/state-manager/state-manager.js
-var StateManager = class _StateManager {
+var StateManager = class _StateManager extends event_emitter_default {
   /**
    * Creates a new StateManager instance.
    * @param {Object} store - The store object to manage state for.
@@ -2714,6 +2735,7 @@ var StateManager = class _StateManager {
    * @param {string} [options.id="model"] - Unique identifier for the state in localStorage.
    */
   constructor(store, options = {}) {
+    super();
     this.store = store;
     this.options = Object.assign({ id: "model" }, options);
   }
@@ -2747,9 +2769,11 @@ var StateManager = class _StateManager {
     };
     try {
       localStorage.setItem(this.options.id, JSON.stringify(state));
+      this.emit("saveState", state);
       return state;
     } catch (error) {
       console.error("Error saving state:", error);
+      this.emit("saveStateError", error);
       return null;
     }
   }
@@ -2762,13 +2786,17 @@ var StateManager = class _StateManager {
       console.warn("localStorage is not available");
       return null;
     }
-    const savedState = localStorage.getItem(this.options.id);
-    if (savedState) {
-      const parsed = JSON.parse(savedState);
-      Object.assign(this.store.state, parsed.data);
-      return parsed;
+    try {
+      const savedState = localStorage.getItem(this.options.id);
+      if (savedState) {
+        const parsed = JSON.parse(savedState);
+        Object.assign(this.store.state, parsed.data);
+        this.emit("restoreState", parsed);
+        return parsed;
+      }
+    } catch (error) {
+      this.emit("restoreStateError", error);
     }
-    return null;
   }
   /**
    * Creates a snapshot of the current state.
@@ -2780,10 +2808,12 @@ var StateManager = class _StateManager {
       return null;
     }
     const dataToSave = JSON.parse(JSON.stringify(this.store.getState()));
-    return {
+    const snapshot = {
       data: dataToSave,
       timestamp: Date.now()
     };
+    this.emit("createSnapshot", snapshot);
+    return snapshot;
   }
   /**
    * Restores the state from a snapshot.  
@@ -2797,6 +2827,7 @@ var StateManager = class _StateManager {
     }
     if (snapshot) {
       Object.assign(this.store.state, snapshot.data);
+      this.emit("restoreSnapshot", snapshot);
       return snapshot;
     }
     return null;
@@ -2864,7 +2895,17 @@ var Model = class _Model extends event_emitter_default {
       this.dom.updateDOM(data.path, data.newValue);
       this.dom.updateInputs(data.path, data.newValue);
       this.computedProps.update(data.path);
+      this.emit("change", data);
     });
+    this.store.on("compute", (data) => this.emit("compute", data));
+    this.store.on("arrayChange", (data) => this.emit("arrayChange", data));
+    this.store.on("batchComplete", (data) => this.emit("batchComplete", data));
+    this.stateManager.on("saveState", (data) => this.emit("saveState", data));
+    this.stateManager.on("saveStateError", (error) => this.emit("saveStateError", error));
+    this.stateManager.on("restoreState", (data) => this.emit("restoreState", data));
+    this.stateManager.on("restoreStateError", (error) => this.emit("restoreStateError", error));
+    this.stateManager.on("createSnapshot", (data) => this.emit("createSnapshot", data));
+    this.stateManager.on("restoreSnapshot", (data) => this.emit("restoreSnapshot", data));
   }
   /**
    * Adds a validator function to a specified path.
@@ -2896,6 +2937,24 @@ var Model = class _Model extends event_emitter_default {
    */
   watch(path, callback) {
     this.store.watch(path, callback);
+  }
+  /**
+   * Executes a batch of state changes in a single update cycle.
+   * @param callback
+   */
+  batch(callback) {
+    return this.store.batch(callback);
+  }
+  /**
+   * Detects changes between two arrays and returns the differences.
+   * @param newArray
+   * @param oldArray
+   * @returns {{added: [], removed: [], moved: []}}
+   */
+  diffArrays(newArray, oldArray) {
+    return this.store.detectArrayChanges(newArray, oldArray);
+  }
+  diff() {
   }
   /**
    * Initializes the DOM bindings for the model.
@@ -2963,10 +3022,11 @@ var Model = class _Model extends event_emitter_default {
    * @throws {Error} If a plugin with the same name is already registered.
    */
   static registerPlugin(name, plugin) {
-    if (this.plugins.has(name)) {
+    if (_Model.plugins.has(name)) {
       throw new Error(`Plugin ${name} already registered`);
     }
-    this.plugins.set(name, plugin);
+    _Model.plugins.set(name, plugin);
+    this.emit("pluginRegistered", name);
   }
   /**
    * Uses a registered plugin by name.
@@ -2983,6 +3043,16 @@ var Model = class _Model extends event_emitter_default {
     return this;
   }
   /**
+   * Removes a registered plugin by name.
+   * @param name
+   */
+  static removePlugin(name) {
+    if (_Model.plugins.has(name)) {
+      _Model.plugins.delete(name);
+      this.emit("pluginUnregistered", name);
+    }
+  }
+  /**
    * Destroys the model instance and cleans up resources.
    */
   destroy() {
@@ -2994,8 +3064,8 @@ var Model = class _Model extends event_emitter_default {
 var model_default = Model;
 
 // src/index.js
-var version = "0.12.0";
-var build_time = "03.03.2025, 23:16:56";
+var version = "0.13.0";
+var build_time = "04.03.2025, 00:33:37";
 model_default.info = () => {
   console.info(`%c Model %c v${version} %c ${build_time} `, "color: white; font-weight: bold; background: #0080fe", "color: white; background: darkgreen", "color: white; background: #0080fe;");
 };
