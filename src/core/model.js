@@ -11,7 +11,6 @@ import StateManager from "../state-manager/state-manager.js";
  */
 const ModelOptions = {
     id: "model", 
-    memoizeComputed: true,
 }
 
 /**

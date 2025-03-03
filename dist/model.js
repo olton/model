@@ -2820,8 +2820,7 @@ var StateManager = class _StateManager {
 
 // src/core/model.js
 var ModelOptions = {
-  id: "model",
-  memoizeComputed: true
+  id: "model"
 };
 var Model = class _Model extends event_emitter_default {
   /**
