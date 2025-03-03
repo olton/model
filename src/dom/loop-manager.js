@@ -4,6 +4,7 @@ export default class LoopManager {
         this.domManager = domManager;
         this.model = model;
         this.loops = new Map();
+        this.loopsIn = []
     }
 
     // Парсинг циклов в DOM (data-for)
@@ -45,13 +46,133 @@ export default class LoopManager {
 
             this.updateLoop(element);
         });
+
+        // Добавляем обработку data-in
+        const inLoops = rootElement.querySelectorAll('[data-in]');
+        inLoops.forEach(element => {
+            const attributeValue = element.getAttribute('data-in');
+            const match = attributeValue.match(/^\s*(\w+)\s+in\s+(\S+)\s*$/);
+
+            if (!match) {
+                console.error(`Invalid data-in syntax: ${attributeValue}`);
+                return;
+            }
+
+            const [_, keyVar, objectPath] = match;
+
+            // Сохраняем шаблон
+            const template = element.innerHTML;
+            const parent = element.parentNode;
+            const placeholder = document.createComment(`data-in: ${attributeValue}`);
+
+            // Скрываем оригинальный элемент
+            element.style.display = 'none';
+            parent.insertBefore(placeholder, element);
+
+            // Сохраняем информацию для обновления
+            this.loopsIn.push({
+                type: 'in', // тип цикла - объект
+                originalElement: element,
+                template,
+                placeholder,
+                objectPath,
+                keyVar,
+                elements: [] // элементы, сгенерированные для свойств объекта
+            });
+
+            // Генерируем элементы при первом рендеринге
+            const objectData = this.model.store.get(objectPath);
+            if (objectData && typeof objectData === 'object' && !Array.isArray(objectData)) {
+                this.updateInLoop(this.loopsIn[this.loopsIn.length - 1], objectData);
+            }
+        });
     }
 
+    updateInLoop(loop, objectData) {
+        // Очищаем предыдущие элементы
+        loop.elements.forEach(el => el.remove());
+        loop.elements = [];
+
+        // Если данных нет или это не объект, не создаем элементы
+        if (!objectData || typeof objectData !== 'object' || Array.isArray(objectData)) {
+            return;
+        }
+
+        // Обходим свойства объекта и создаем элементы
+        Object.keys(objectData).forEach(key => {
+            // Создаем новый элемент на основе шаблона
+            const newElement = loop.originalElement.cloneNode(true);
+            newElement.removeAttribute('data-in');
+            newElement.style.display = '';
+
+            // Создаем контекст для данного ключа
+            const itemContext = {
+                [loop.keyVar]: key,
+            };
+            
+            // Заполняем шаблон значениями
+            newElement.innerHTML = this.processTemplate(loop.template, objectData, key, itemContext);
+
+            // Добавляем элемент в DOM
+            loop.placeholder.parentNode.insertBefore(newElement, loop.placeholder.nextSibling);
+
+            // Сохраняем созданный элемент
+            loop.elements.push(newElement);
+
+            // Обрабатываем вложенные директивы
+            this.domManager.bindDOM(newElement);
+        });
+    }
+
+    processTemplate(template, objectData, key, itemContext) {
+        console.log(objectData)
+        return template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
+            path = path.trim();
+            const keyVar = Object.keys(itemContext)[0];
+
+            // Случай 1: Если путь точно равен имени переменной ключа
+            if (path === keyVar) {
+                return key;
+            }
+
+            // Случай 2: Обращение к объекту по ключу (например: objectPath[keyVar])
+            const bracketRegex = new RegExp(`(\\w+)\\[${keyVar}\\]`);
+            const bracketMatch = path.match(bracketRegex);
+
+            if (bracketMatch) {
+                const objName = bracketMatch[1];
+                const obj = objectData;
+
+                if (obj && typeof obj === 'object') {
+                    return obj[key] !== undefined ? obj[key] : '';
+                }
+            }
+
+            // Случай 3: Доступ к данным вне цикла
+            const value = this.model.store.get(path);
+            if (value !== undefined) {
+                return value;
+            }
+
+            return '';
+        });
+    }
+    
     // Обновление всех циклов
-    updateLoops(arrayPath, value) {
+    updateLoops(path, value) {
         this.loops.forEach((loopInfo, element) => {
-            if (loopInfo.arrayPath === arrayPath) {
+            if (loopInfo.arrayPath === path) {
                 this.updateLoop(element);
+            }
+        });
+
+        // Добавляем обработку изменения для data-in
+        this.loopsIn.forEach(loop => {
+            if (loop.type === 'in' && (loop.objectPath === path || path.startsWith(loop.objectPath + '.'))) {
+                const objectData = this.model.store.get(loop.objectPath);
+                if (objectData && typeof objectData === 'object') {
+                    this.updateInLoop(loop, objectData);
+                }
             }
         });
     }

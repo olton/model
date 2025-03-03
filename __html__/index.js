@@ -18,6 +18,11 @@ const app = new Model({
     fullAddress(){
         return `${this.user.address.city}, ${this.user.address.country}`;
     },
+    data: {
+        name: "John Doe",
+        age: 20,
+        address: "New York, USA"
+    }
 })
 
 app.init("#root")

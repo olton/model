@@ -198,7 +198,7 @@ export default class DOMManager {
         });
 
         // Обновляем циклы для массивов
-        if (Array.isArray(value) || isArrayMethodChange) {
+        if (Array.isArray(value) || isArrayMethodChange || typeof value === 'object') {
             this.loopManager.updateLoops(propertyPath, value);
         }
 
