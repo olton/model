@@ -1,6 +1,5 @@
 import EventEmitter from '../event-emitter/event-emitter.js';
 import DevTools from "../dev/dev-tools.js";
-import Logger from '../dev/logger.js';
 import ReactiveStore from "../reactive/reactive-store.js";
 import DOMManager from "../dom/dom-manager.js";
 import ComputedProps from "../reactive/computed.js";
@@ -113,7 +112,7 @@ class Model extends EventEmitter {
         const rootElement = typeof selector === 'string' ? document.querySelector(selector) : selector;
 
         if (!rootElement) {
-            Logger.error('The root element was not found!');
+            console.error('The root element was not found!');
             return;
         }
 
