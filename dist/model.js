@@ -2829,6 +2829,119 @@ var ComputedProps = class {
   }
 };
 
+// src/state-manager/state-manager.js
+var StateManager = class _StateManager {
+  /**
+   * Creates a new StateManager instance.
+   * @param {Object} store - The store object to manage state for.
+   * @param {Object} [options={}] - Configuration options for the StateManager.
+   * @param {string} [options.id="model"] - Unique identifier for the state in localStorage.
+   */
+  constructor(store, options = {}) {
+    this.store = store;
+    this.options = Object.assign({ id: "model" }, options);
+  }
+  /**
+   * Checks if localStorage is available.
+   * @returns {boolean}
+   */
+  static isStorageAvailable() {
+    try {
+      const test = "__test__";
+      localStorage.setItem(test, test);
+      localStorage.removeItem(test);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+  /**
+   * Saves the current state to localStorage.
+   * @returns {{data: any, timestamp: number}|null}
+   */
+  saveState() {
+    if (!_StateManager.isStorageAvailable()) {
+      console.warn("localStorage is not available");
+      return null;
+    }
+    const dataToSave = JSON.parse(JSON.stringify(this.store.getState()));
+    const state = {
+      data: dataToSave,
+      timestamp: Date.now()
+    };
+    try {
+      localStorage.setItem(this.options.id, JSON.stringify(state));
+      return state;
+    } catch (error) {
+      console.error("Error saving state:", error);
+      return null;
+    }
+  }
+  /**
+   * Restores the state from localStorage.
+   * @returns {any|null}
+   */
+  restoreState() {
+    if (!_StateManager.isStorageAvailable()) {
+      console.warn("localStorage is not available");
+      return null;
+    }
+    const savedState = localStorage.getItem(this.options.id);
+    if (savedState) {
+      const parsed = JSON.parse(savedState);
+      Object.assign(this.store.state, parsed.data);
+      return parsed;
+    }
+    return null;
+  }
+  /**
+   * Creates a snapshot of the current state.
+   * @returns {{data: any, timestamp: number}|null}
+   */
+  createSnapshot() {
+    if (!_StateManager.isStorageAvailable()) {
+      console.warn("localStorage is not available");
+      return null;
+    }
+    const dataToSave = JSON.parse(JSON.stringify(this.store.getState()));
+    return {
+      data: dataToSave,
+      timestamp: Date.now()
+    };
+  }
+  /**
+   * Restores the state from a snapshot.  
+   * @param snapshot
+   * @returns {*|null}
+   */
+  restoreSnapshot(snapshot) {
+    if (!_StateManager.isStorageAvailable()) {
+      console.warn("localStorage is not available");
+      return null;
+    }
+    if (snapshot) {
+      Object.assign(this.store.state, snapshot.data);
+      return snapshot;
+    }
+    return null;
+  }
+  /**
+   * Enables automatic state-saving at a specified interval.
+   * @param interval
+   */
+  enableAutoSave(interval = 5e3) {
+    this.autoSaveInterval = setInterval(() => {
+      this.saveState();
+    }, interval);
+  }
+  /**
+   * Disables automatic state-saving.
+   */
+  disableAutoSave() {
+    clearInterval(this.autoSaveInterval);
+  }
+};
+
 // src/core/model.js
 var ModelOptions = {
   id: "model",
@@ -2863,6 +2976,7 @@ var Model = class _Model extends event_emitter_default {
     this.data = this.store.state;
     this.dom = new DOMManager(this);
     this.computedProps = new ComputedProps(this, this.computed);
+    this.stateManager = new StateManager(this.store);
     this.subscribe();
     this.computedProps.init();
   }
@@ -2930,6 +3044,42 @@ var Model = class _Model extends event_emitter_default {
    */
   runDevTools(options = {}) {
     return new dev_tools_default(this, options);
+  }
+  /**
+   * Saves the current state of the model.
+   * @returns {{data: *, timestamp: number}|null}
+   */
+  save() {
+    return this.stateManager.saveState();
+  }
+  /**
+   * Restores the model to a previously saved state.
+   * @returns {*|null}
+   */
+  restore() {
+    return this.stateManager.restoreState();
+  }
+  /**
+   * Creates a snapshot of the current state.
+   * @param _snapshot
+   * @returns {*|null|{data: *, timestamp: number}}
+   */
+  snapshot(_snapshot) {
+    if (!_snapshot) {
+      return this.stateManager.createSnapshot();
+    }
+    return this.stateManager.restoreSnapshot(s);
+  }
+  /**
+   * Enables or disables auto-saving of the model's state.
+   * @param interval
+   */
+  autoSave(interval) {
+    if (!interval) {
+      this.stateManager.disableAutoSave();
+    } else {
+      this.stateManager.enableAutoSave(interval);
+    }
   }
   /**
    * Registers a plugin for the model.
