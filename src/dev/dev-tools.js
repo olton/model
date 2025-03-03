@@ -17,13 +17,13 @@ class ModelDevTools {
     }
 
     initializeDevTools() {
-        // Создаем глобальный объект для доступа из консоли
+        // We create a global object for access from the console
         window.__MODEL_DEVTOOLS__ = this;
 
-        // Добавляем панель DevTools
+        // Add the Devtools panel
         this.createDevToolsPanel();
 
-        // Подписываемся на события модели
+        // We subscribe to the events of the model
         this.setupModelListeners();
     }
 
@@ -57,7 +57,7 @@ class ModelDevTools {
 
         document.body.appendChild(panel);
 
-        // Добавляем кнопку для открытия панели
+        // Add a button for opening the panel
         this.createToggleButton();
 
         document.getElementById('devtools-close').onclick = () => this.togglePanel();
@@ -107,7 +107,7 @@ class ModelDevTools {
     }
 
     setupModelListeners() {
-        // Отслеживание изменений данных
+        // Tracking data changes
         this.model.store.on('change', (data) => {
             this.logChange({
                 type: 'data-change',
@@ -118,7 +118,7 @@ class ModelDevTools {
             });
         });
 
-        // Отслеживание событий от хранилища
+        // Tracking events from the storage
         this.model.store.on('*', (eventName, data) => {
             if (eventName !== 'change' && eventName !== 'compute' && eventName !== 'arrayChange') {
                 this.logChange({
@@ -130,7 +130,7 @@ class ModelDevTools {
             }
         });
 
-        // Отслеживание событий модели
+        // Tracking the events of the model
         this.model.on('*', (eventName, data) => {
             if (eventName !== 'change' && eventName !== 'compute') {
                 this.logChange({
@@ -142,7 +142,7 @@ class ModelDevTools {
             }
         });
 
-        // Отслеживание вычисляемых свойств
+        // Tracking the calculated properties
         this.model.store.on('compute', (data) => {
             this.logChange({
                 type: 'computed-update',
@@ -153,7 +153,7 @@ class ModelDevTools {
             });
         });
 
-        // Отслеживание изменений массивов
+        // Tracking changes in arrays
         this.model.store.on('arrayChange', (data) => {
             this.logChange({
                 type: 'array-operation',
@@ -170,30 +170,30 @@ class ModelDevTools {
     logChange(entry) {
         if (!this.options.enabled) return;
 
-        // Сохраняем снимок состояния
+        // We retain a picture of the condition
         if (this.options.timeTravel) {
             this.saveSnapshot(entry);
         }
 
-        // Обновляем отображение
+        // We update the display
         this.updateDisplay();
     }
 
     saveSnapshot(entry) {
-        // Создаем снимок текущего состояния
+        // We create a picture of the current state
         const snapshot = {
             ...entry,
             state: JSON.parse(JSON.stringify(this.model.data)),
-            // Получаем все вычисляемые свойства
+            // We get all the calculated properties
             computed: this.getComputedValues()
         };
 
-        // Добавляем в историю
+        // Add to history
         this.history = this.history.slice(0, this.currentIndex + 1);
         this.history.push(snapshot);
         this.currentIndex++;
 
-        // Ограничиваем количество снимков
+        // Limit the number of snapshots
         if (this.history.length > this.options.maxSnapshots) {
             this.history.shift();
             this.currentIndex--;
@@ -225,7 +225,7 @@ class ModelDevTools {
             let changeContent;
 
             try {
-                // Форматируем timestamp для лучшего отображения
+                // We format the Timestamp for a better display
                 const formattedChange = {
                     ...change,
                     timestamp: new Date(change.timestamp).toLocaleTimeString()
@@ -241,7 +241,7 @@ class ModelDevTools {
             </div>\n`;
         }
 
-        // Получаем текущие вычисляемые значения
+        // We get current calculated values
         const computedValues = this.getComputedValues();
 
         content.innerHTML = `
@@ -285,14 +285,14 @@ class ModelDevTools {
     }
 
     getComputedValues() {
-        // Проверяем, есть ли объект computed и метод getAll или get
+        // We check if there is an object of Computed and the Getall or Get method
         if (!this.model.computed) return {};
 
         if (typeof this.model.computed.all === 'function') {
             return this.model.computed.all();
         }
 
-        // Если нет конкретного метода, пробуем получить свойства через итерацию
+        // If there is no specific method, we try to obtain properties through iteration
         if (this.model.computed.keys && Array.isArray(this.model.computed.keys)) {
             const result = {};
             for (const key of this.model.computed.keys) {
@@ -301,7 +301,7 @@ class ModelDevTools {
             return result;
         }
 
-        // Если всё еще нет данных, пытаемся получить значения из this.model.data
+        // If there is still no data, we are trying to get values from this.model.data
         const computedValues = {};
         for (const key in this.model.data) {
             if (this.model.computed && typeof this.model.computed[key] !== 'undefined') {
@@ -335,20 +335,20 @@ class ModelDevTools {
         const snapshot = this.history[index];
 
         try {
-            // Временно отключаем слушатели, чтобы избежать циклов
+            // Temporarily turn off the listeners to avoid cycles
             const origEnabled = this.options.enabled;
             this.options.enabled = false;
 
-            // Загружаем состояние из снапшота
+            // We load the condition from the snapshot
             this.model.store.setState(snapshot.state);
 
-            // Обновляем значения вычисляемых свойств
+            // Update the values of the calculated properties
             if (this.model.computed) {
-                // Проверяем наличие метода recompute для всех свойств
+                // Check the presence of the Recompute method for all properties
                 if (typeof this.model.computed.recomputeAll === 'function') {
                     this.model.computed.recomputeAll();
                 } else {
-                    // Если recomputeAll отсутствует, пробуем обновить каждое свойство
+                    // If the Recompteall is absent, we try to update each property
                     for (const key in snapshot.computed) {
                         if (typeof this.model.computed.evaluate === 'function') {
                             this.model.computed.evaluate(key, true);
@@ -359,19 +359,17 @@ class ModelDevTools {
                 }
             }
 
-            // Обновляем DOM
+            // We update DOM
             this.model.dom.updateAllDOM();
 
             this.currentIndex = index;
             this.options.enabled = origEnabled;
-
-            console.log(`Time traveled to snapshot ${index}`, snapshot);
         } catch (e) {
             console.error('Error during time travel:', e);
         }
     }
 
-    // Методы для анализа производительности
+    // Methods for analysis of performance
     startPerfMonitoring() {
         this.perfMetrics = {
             updates: 0,

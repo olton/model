@@ -1,7 +1,7 @@
 
 /*!
  * Model v0.11.0
- * Build: 03.03.2025, 11:28:57
+ * Build: 03.03.2025, 16:03:15
  * Copyright 2012-2025 by Serhii Pimenov
  * Licensed under MIT
  */
@@ -83,12 +83,16 @@ var DevToolsStyle = `
             bottom: 10px;
             right: 10px;
             z-index: 9998;
-            padding: 5px 10px;
+            height: 36px;
+            width: 36px;
             background: #444;
             color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }        
 
         #model-devtools-time-travel-dialog {
@@ -313,7 +317,7 @@ var ModelDevTools = class {
     const snapshot = {
       ...entry,
       state: JSON.parse(JSON.stringify(this.model.data)),
-      // Получаем все вычисляемые свойства
+      // We get all the calculated properties
       computed: this.getComputedValues()
     };
     this.history = this.history.slice(0, this.currentIndex + 1);
@@ -453,12 +457,11 @@ var ModelDevTools = class {
       this.model.dom.updateAllDOM();
       this.currentIndex = index;
       this.options.enabled = origEnabled;
-      console.log(`Time traveled to snapshot ${index}`, snapshot);
     } catch (e) {
       console.error("Error during time travel:", e);
     }
   }
-  // Методы для анализа производительности
+  // Methods for analysis of performance
   startPerfMonitoring() {
     this.perfMetrics = {
       updates: 0,
@@ -918,6 +921,7 @@ var LoopManager = class {
     this.domManager = domManager;
     this.model = model;
     this.loops = /* @__PURE__ */ new Map();
+    this.loopsIn = [];
   }
   // Парсинг циклов в DOM (data-for)
   parseLoops(rootElement) {
@@ -949,12 +953,92 @@ var LoopManager = class {
       });
       this.updateLoop(element);
     });
+    const inLoops = rootElement.querySelectorAll("[data-in]");
+    inLoops.forEach((element) => {
+      const attributeValue = element.getAttribute("data-in");
+      const match = attributeValue.match(/^\s*(\w+)\s+in\s+(\S+)\s*$/);
+      if (!match) {
+        console.error(`Invalid data-in syntax: ${attributeValue}`);
+        return;
+      }
+      const [_, keyVar, objectPath] = match;
+      const template = element.innerHTML;
+      const parent = element.parentNode;
+      const placeholder = document.createComment(`data-in: ${attributeValue}`);
+      element.style.display = "none";
+      parent.insertBefore(placeholder, element);
+      this.loopsIn.push({
+        type: "in",
+        // тип цикла - объект
+        originalElement: element,
+        template,
+        placeholder,
+        objectPath,
+        keyVar,
+        elements: []
+        // элементы, сгенерированные для свойств объекта
+      });
+      const objectData = this.model.store.get(objectPath);
+      if (objectData && typeof objectData === "object" && !Array.isArray(objectData)) {
+        this.updateInLoop(this.loopsIn[this.loopsIn.length - 1], objectData);
+      }
+    });
+  }
+  updateInLoop(loop, objectData) {
+    loop.elements.forEach((el) => el.remove());
+    loop.elements = [];
+    if (!objectData || typeof objectData !== "object" || Array.isArray(objectData)) {
+      return;
+    }
+    Object.keys(objectData).forEach((key) => {
+      const newElement = loop.originalElement.cloneNode(true);
+      newElement.removeAttribute("data-in");
+      newElement.style.display = "";
+      const itemContext = {
+        [loop.keyVar]: key
+      };
+      newElement.innerHTML = this.processTemplate(loop.template, objectData, key, itemContext);
+      loop.placeholder.parentNode.insertBefore(newElement, loop.placeholder.nextSibling);
+      loop.elements.push(newElement);
+      this.domManager.bindDOM(newElement);
+    });
+  }
+  processTemplate(template, objectData, key, itemContext) {
+    return template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
+      path = path.trim();
+      const keyVar = Object.keys(itemContext)[0];
+      if (path === keyVar) {
+        return key;
+      }
+      const bracketRegex = new RegExp(`(\\w+)\\[${keyVar}\\]`);
+      const bracketMatch = path.match(bracketRegex);
+      if (bracketMatch) {
+        const objName = bracketMatch[1];
+        const obj = objectData;
+        if (obj && typeof obj === "object") {
+          return obj[key] !== void 0 ? obj[key] : "";
+        }
+      }
+      const value = this.model.store.get(path);
+      if (value !== void 0) {
+        return value;
+      }
+      return "";
+    });
   }
   // Обновление всех циклов
-  updateLoops(arrayPath, value) {
+  updateLoops(path, value) {
     this.loops.forEach((loopInfo, element) => {
-      if (loopInfo.arrayPath === arrayPath) {
+      if (loopInfo.arrayPath === path) {
         this.updateLoop(element);
+      }
+    });
+    this.loopsIn.forEach((loop) => {
+      if (loop.type === "in" && (loop.objectPath === path || path.startsWith(loop.objectPath + "."))) {
+        const objectData = this.model.store.get(loop.objectPath);
+        if (objectData && typeof objectData === "object") {
+          this.updateInLoop(loop, objectData);
+        }
       }
     });
   }
@@ -1059,38 +1143,295 @@ var LoopManager = class {
 
 // src/dom/conditional-manager.js
 var ConditionalManager = class {
-  constructor(domManager, model) {
-    this.domManager = domManager;
+  constructor(dom, model) {
+    this.dom = dom;
     this.model = model;
-    this.virtualDom = /* @__PURE__ */ new Map();
+    this.dependencies = /* @__PURE__ */ new Map();
+    this.conditionalGroups = [];
+    this.subscribe();
   }
-  // Парсим DOM для поиска условных выражений
-  parseConditionals(rootElement) {
-    const conditionalElements = rootElement.querySelectorAll("[data-if]");
-    conditionalElements.forEach((element) => {
-      const expression = element.getAttribute("data-if").trim();
-      element.__originalDisplay = element.style.display === "none" ? "" : element.style.display;
-      const variables = this.extractVariables(expression);
-      variables.forEach((variable) => {
-        this.domManager.registerDomDependency(variable, element, {
-          type: "conditional",
-          expression
-        });
+  subscribe() {
+    this.model.store.on("change", (data) => {
+      const dependentGroups = this.getGroupsByPath(data.path);
+      dependentGroups.forEach((group) => {
+        this.updateConditionalGroup(group);
       });
-      this.updateConditional(element, expression);
     });
   }
-  // Обновление условного выражения
-  updateConditional(element, expression) {
-    const currentState = this.virtualDom.get(element);
-    const context = { ...this.model.store.getState() };
-    const result = this.evaluateExpression(expression, context);
-    if (currentState !== result) {
-      element.style.display = result ? element.__originalDisplay || "" : "none";
-      this.virtualDom.set(element, result);
+  // Obtaining groups depending on the specified path
+  getGroupsByPath(path) {
+    const result = /* @__PURE__ */ new Set();
+    this.conditionalGroups.forEach((group) => {
+      const hasDependency = group.some((item) => {
+        if (!item.expression) return false;
+        return item.expression.includes(path) || path.startsWith(this.extractBasePath(item.expression));
+      });
+      if (hasDependency) {
+        result.add(group);
+      }
+    });
+    return Array.from(result);
+  }
+  // Extracting the basic path from expression (for example, from "Counter> 0" extract "Counter")
+  extractBasePath(expression) {
+    const matches = expression.match(/[a-zA-Z_][a-zA-Z0-9_]*/g);
+    return matches ? matches[0] : "";
+  }
+  parseConditionals(rootElement) {
+    const nodes = rootElement.querySelectorAll("[data-if],[data-else-if],[data-else]");
+    let currentGroup = [];
+    const groups = [];
+    nodes.forEach((node) => {
+      if (node.hasAttribute("data-if")) {
+        if (currentGroup.length) {
+          groups.push(currentGroup);
+        }
+        currentGroup = [{
+          element: node,
+          type: "if",
+          expression: node.getAttribute("data-if")
+        }];
+      } else if (node.hasAttribute("data-else-if")) {
+        if (currentGroup.length && this.isAdjacentNode(currentGroup[currentGroup.length - 1].element, node)) {
+          currentGroup.push({
+            element: node,
+            type: "else-if",
+            expression: node.getAttribute("data-else-if")
+          });
+        } else {
+          if (currentGroup.length) {
+            groups.push(currentGroup);
+          }
+          currentGroup = [{
+            element: node,
+            type: "if",
+            // We consider it as a regular if
+            expression: node.getAttribute("data-else-if")
+          }];
+        }
+      } else if (node.hasAttribute("data-else")) {
+        if (currentGroup.length && this.isAdjacentNode(currentGroup[currentGroup.length - 1].element, node)) {
+          currentGroup.push({
+            element: node,
+            type: "else",
+            expression: null
+          });
+          groups.push(currentGroup);
+          currentGroup = [];
+        } else {
+          console.warn("data-else \u0431\u0435\u0437 \u043F\u0440\u0435\u0434\u0448\u0435\u0441\u0442\u0432\u0443\u044E\u0449\u0435\u0433\u043E data-if \u0438\u043B\u0438 data-else-if", node);
+        }
+      }
+    });
+    if (currentGroup.length) {
+      groups.push(currentGroup);
+    }
+    this.conditionalGroups = groups;
+    groups.forEach((group) => this.updateConditionalGroup(group));
+    this.setupDependencies(nodes);
+  }
+  // Checks whether the nodes are neighboring Dom
+  isAdjacentNode(node1, node2) {
+    let current = node1.nextSibling;
+    while (current) {
+      if (current === node2) return true;
+      if (current.nodeType === 1 && !this.isWhitespaceNode(current)) return false;
+      current = current.nextSibling;
+    }
+    return false;
+  }
+  // Checks whether the knot is a sample
+  isWhitespaceNode(node) {
+    return node.nodeType === 3 && node.textContent.trim() === "";
+  }
+  updateConditionalGroup(group) {
+    const context = this.model && this.model.store ? { ...this.model.store.getState() } : this.model && this.model.data ? this.model.data : {};
+    let conditionMet = false;
+    for (const item of group) {
+      if (item.type === "if" || item.type === "else-if") {
+        const result = !conditionMet && this.evaluateExpression(item.expression, context);
+        if (result) {
+          item.element.style.display = "";
+          conditionMet = true;
+        } else {
+          item.element.style.display = "none";
+        }
+      } else if (item.type === "else") {
+        item.element.style.display = conditionMet ? "none" : "";
+      }
     }
   }
-  // Парсим DOM для поиска атрибутов с привязками
+  updateConditional(element, expression) {
+    const group = this.findGroupForElement(element);
+    if (group) {
+      this.updateConditionalGroup(group);
+    } else {
+      const context = this.model && this.model.store ? { ...this.model.store.getState() } : this.model && this.model.data ? this.model.data : {};
+      const result = this.evaluateExpression(expression, context);
+      element.style.display = result ? "" : "none";
+    }
+  }
+  findGroupForElement(element) {
+    for (const group of this.conditionalGroups || []) {
+      if (group.some((item) => item.element === element)) {
+        return group;
+      }
+    }
+    return null;
+  }
+  setupDependencies(nodes) {
+    this.dependencies = /* @__PURE__ */ new Map();
+    nodes.forEach((element) => {
+      let expression;
+      if (element.hasAttribute("data-if")) {
+        expression = element.getAttribute("data-if");
+      } else if (element.hasAttribute("data-else-if")) {
+        expression = element.getAttribute("data-else-if");
+      } else {
+        return;
+      }
+      const variables = this.extractVariables(expression);
+      variables.forEach((variable) => {
+        if (!this.dependencies.has(variable)) {
+          this.dependencies.set(variable, []);
+        }
+        this.dependencies.get(variable).push({
+          element,
+          expression,
+          type: element.hasAttribute("data-if") ? "if" : "else-if"
+        });
+      });
+    });
+  }
+  extractVariables(expression) {
+    const variables = [];
+    const parts = expression.split(/[^a-zA-Z0-9_.]/);
+    parts.forEach((part) => {
+      const varName = part.trim();
+      if (varName && /^[a-zA-Z_][a-zA-Z0-9_.]*$/.test(varName)) {
+        const baseName = varName.split(".")[0];
+        if (!variables.includes(baseName) && baseName !== "true" && baseName !== "false" && baseName !== "null" && baseName !== "undefined" && !isNaN(Number(baseName))) {
+          variables.push(baseName);
+        }
+      }
+    });
+    return variables;
+  }
+  getDependenciesByPath(path) {
+    const result = [];
+    this.dependencies.forEach((deps, variable) => {
+      if (variable === path || path.startsWith(variable + ".")) {
+        result.push(...deps);
+      }
+    });
+    return result;
+  }
+  // Safe assessment of expressions
+  evaluateExpression(expression, context) {
+    try {
+      if (expression.startsWith("{{") && expression.endsWith("}}")) {
+        const path = expression.substring(2, expression.length - 2).trim();
+        return this.getValueFromContext(context, path);
+      }
+      return this.parseExpression(expression, context);
+    } catch (error) {
+      console.error("\u041E\u0448\u0438\u0431\u043A\u0430 \u043F\u0440\u0438 \u0432\u044B\u0447\u0438\u0441\u043B\u0435\u043D\u0438\u0438 \u0432\u044B\u0440\u0430\u0436\u0435\u043D\u0438\u044F:", error);
+      return false;
+    }
+  }
+  // Obtaining a value along the way in the object
+  getValueFromContext(obj, path) {
+    if (!path) return obj;
+    return path.split(".").reduce((acc, part) => {
+      const arrayMatch = part.match(/^([^\[]+)(?:\[(\d+)\])?$/);
+      if (arrayMatch) {
+        const [_, propName, arrayIndex] = arrayMatch;
+        const propValue = acc?.[propName];
+        return arrayIndex !== void 0 && Array.isArray(propValue) ? propValue[parseInt(arrayIndex, 10)] : propValue;
+      }
+      return acc?.[part];
+    }, obj);
+  }
+  // Safe Parsing expressions
+  parseExpression(expression, context) {
+    expression = expression.trim();
+    const ternaryMatch = expression.match(/(.+?)\s*\?\s*(.+?)\s*:\s*(.+)/);
+    if (ternaryMatch) {
+      const [_, condition, trueExpr, falseExpr] = ternaryMatch;
+      return this.parseExpression(condition, context) ? this.parseExpression(trueExpr, context) : this.parseExpression(falseExpr, context);
+    }
+    if (expression.includes("&&")) {
+      const parts = expression.split("&&");
+      return parts.every((part) => this.parseExpression(part.trim(), context));
+    }
+    if (expression.includes("||")) {
+      const parts = expression.split("||");
+      return parts.some((part) => this.parseExpression(part.trim(), context));
+    }
+    const comparisonMatch = expression.match(/(.+?)\s*(===|==|!==|!=|>=|<=|>|<)\s*(.+)/);
+    if (comparisonMatch) {
+      const [_, left, operator, right] = comparisonMatch;
+      const leftValue = this.parseExpression(left.trim(), context);
+      const rightValue = this.parseExpression(right.trim(), context);
+      switch (operator) {
+        case "==":
+          return leftValue == rightValue;
+        case "===":
+          return leftValue === rightValue;
+        case "!=":
+          return leftValue != rightValue;
+        case "!==":
+          return leftValue !== rightValue;
+        case ">":
+          return leftValue > rightValue;
+        case "<":
+          return leftValue < rightValue;
+        case ">=":
+          return leftValue >= rightValue;
+        case "<=":
+          return leftValue <= rightValue;
+      }
+    }
+    if (expression.startsWith("'") && expression.endsWith("'") || expression.startsWith('"') && expression.endsWith('"')) {
+      return expression.substring(1, expression.length - 1);
+    }
+    if (/^-?\d+(\.\d+)?$/.test(expression)) {
+      return parseFloat(expression);
+    }
+    if (expression === "true") return true;
+    if (expression === "false") return false;
+    if (expression === "null") return null;
+    if (expression === "undefined") return void 0;
+    return this.getValueFromContext(context, expression);
+  }
+  destroy() {
+    this.dependencies.clear();
+    this.conditionalGroups = [];
+  }
+};
+
+// src/utils/expression.js
+var extractVariables = (expression) => {
+  const matches = expression.match(/\b[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*\b/g) || [];
+  return [...new Set(matches)];
+};
+var evaluateExpression = (expression, context) => {
+  try {
+    const func = new Function(...Object.keys(context), `return ${expression}`);
+    return func(...Object.values(context));
+  } catch (error) {
+    console.error("\u041E\u0448\u0438\u0431\u043A\u0430 \u043F\u0440\u0438 \u0432\u044B\u0447\u0438\u0441\u043B\u0435\u043D\u0438\u0438 \u0432\u044B\u0440\u0430\u0436\u0435\u043D\u0438\u044F:", error);
+    return false;
+  }
+};
+
+// src/dom/attribute-manager.js
+var AttributeManager = class {
+  constructor(dom, model) {
+    this.domManager = dom;
+    this.model = model;
+  }
+  // Parse DOM to search for attributes with bindings
   parseAttributes(rootElement) {
     const elements = rootElement.querySelectorAll("[data-bind]");
     elements.forEach((element) => {
@@ -1098,7 +1439,7 @@ var ConditionalManager = class {
       try {
         const bindings = JSON.parse(bindingExpression.replace(/'/g, '"'));
         for (const [attributeName, expression] of Object.entries(bindings)) {
-          const variables = this.extractVariables(expression);
+          const variables = extractVariables(expression);
           variables.forEach((variable) => {
             this.domManager.registerDomDependency(variable, element, {
               type: "attribute",
@@ -1109,11 +1450,11 @@ var ConditionalManager = class {
           this.updateAttribute(element, attributeName, expression);
         }
       } catch (error) {
-        console.error("\u041E\u0448\u0438\u0431\u043A\u0430 \u0440\u0430\u0437\u0431\u043E\u0440\u0430 \u043F\u0440\u0438\u0432\u044F\u0437\u043E\u043A \u0430\u0442\u0440\u0438\u0431\u0443\u0442\u043E\u0432:", error);
+        console.error("An error of analysis of attachments:", error);
       }
     });
   }
-  // Метод для обновления атрибута на основе выражения
+  // A method for updating the attribute based on expression
   updateAttribute(element, attributeName, expression) {
     const context = { ...this.model.store.getState() };
     let value;
@@ -1121,7 +1462,7 @@ var ConditionalManager = class {
       const path = expression.substring(2, expression.length - 2).trim();
       value = this.model.store.get(path);
     } else {
-      value = this.evaluateExpression(expression, context);
+      value = evaluateExpression(expression, context);
     }
     const previousValue = element.getAttribute(attributeName);
     if (String(value) !== previousValue) {
@@ -1133,25 +1474,6 @@ var ConditionalManager = class {
         element.setAttribute(attributeName, String(value));
       }
     }
-  }
-  // Вспомогательный метод для извлечения переменных из выражения
-  extractVariables(expression) {
-    const matches = expression.match(/\b[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*\b/g) || [];
-    return [...new Set(matches)];
-  }
-  // Метод для оценки выражения
-  evaluateExpression(expression, context) {
-    try {
-      const func = new Function(...Object.keys(context), `return ${expression}`);
-      return func(...Object.values(context));
-    } catch (error) {
-      console.error("\u041E\u0448\u0438\u0431\u043A\u0430 \u043F\u0440\u0438 \u0432\u044B\u0447\u0438\u0441\u043B\u0435\u043D\u0438\u0438 \u0432\u044B\u0440\u0430\u0436\u0435\u043D\u0438\u044F:", error);
-      return false;
-    }
-  }
-  // Освобождение ресурсов
-  destroy() {
-    this.virtualDom.clear();
   }
 };
 
@@ -1165,8 +1487,9 @@ var DOMManager = class {
     this.virtualDom = /* @__PURE__ */ new Map();
     this.loopManager = new LoopManager(this, model);
     this.conditionalManager = new ConditionalManager(this, model);
+    this.attributeManager = new AttributeManager(this, model);
   }
-  // Регистрация зависимости DOM от свойства
+  // Registration Dependencies DOM on Properties
   registerDomDependency(propertyPath, domElement, info) {
     if (!this.domDependencies.has(propertyPath)) {
       this.domDependencies.set(propertyPath, /* @__PURE__ */ new Set());
@@ -1176,7 +1499,7 @@ var DOMManager = class {
       ...info
     });
   }
-  // Обработка шаблонных узлов
+  // Processes template adverbs
   processTemplateNode(node, context) {
     if (node.nodeType === Node.TEXT_NODE) {
       const originalText = node.textContent;
@@ -1193,7 +1516,7 @@ var DOMManager = class {
       });
     }
   }
-  // Парсим DOM для поиска выражений {{ переменная }}
+  // Parsim DOM to search for expressions {{variable}}
   parse(root) {
     const walker = document.createTreeWalker(
       root,
@@ -1236,7 +1559,7 @@ var DOMManager = class {
       });
     });
   }
-  // Установка значения в input-элемент
+  // Setting the value in the Input element
   setInputValue(input, value) {
     if (input.type === "checkbox" || input.type === "radio") {
       input.checked = Boolean(value);
@@ -1244,7 +1567,7 @@ var DOMManager = class {
       input.value = value;
     }
   }
-  // Обновление значений в input-элементах при изменении данных модели
+  // Updating values in Input-elements when changing these models
   updateInputs(propName, value) {
     this.inputs.forEach((item) => {
       if (item.property === propName) {
@@ -1252,7 +1575,7 @@ var DOMManager = class {
       }
     });
   }
-  // Обновляем элементы DOM, которые нуждаются в этом
+  // We update the DOM elements that need this
   updateAllDOM() {
     this.elements.forEach((element) => {
       let newContent = element.template;
@@ -1267,7 +1590,7 @@ var DOMManager = class {
       this.setInputValue(item.element, value);
     });
   }
-  // Обновление DOM при изменении данных
+  // DOM update when changing data
   updateDOM(propertyPath, value) {
     const isArrayMethodChange = value && typeof value === "object" && "method" in value;
     if (isArrayMethodChange) {
@@ -1289,12 +1612,18 @@ var DOMManager = class {
         );
       }
     }
+    const conditionalElements = this.conditionalManager.getDependenciesByPath(propertyPath);
+    conditionalElements.forEach((dep) => {
+      if (dep.type === "if") {
+        this.conditionalManager.updateConditional(dep.element, dep.expression);
+      }
+    });
     this.domDependencies.forEach((deps, path) => {
       if (path.startsWith(`${propertyPath}.`) || path.startsWith(`${propertyPath}[`)) {
         deps.forEach((dep) => elementsToUpdate.add(dep));
       }
     });
-    if (Array.isArray(value) || isArrayMethodChange) {
+    if (Array.isArray(value) || isArrayMethodChange || typeof value === "object") {
       this.loopManager.updateLoops(propertyPath, value);
     }
     if (elementsToUpdate.size === 0) return;
@@ -1311,7 +1640,7 @@ var DOMManager = class {
     });
     updates.template.forEach((dep) => this.updateTemplateNode(dep.element, dep.template));
     updates.conditional.forEach((dep) => this.conditionalManager.updateConditional(dep.element, dep.expression));
-    updates.attribute.forEach((dep) => this.conditionalManager.updateAttribute(dep.element, dep.attribute, dep.expression));
+    updates.attribute.forEach((dep) => this.attributeManager.updateAttribute(dep.element, dep.attribute, dep.expression));
     updates.loop.forEach((dep) => this.loopManager.updateLoopPart(dep.element, dep.arrayPath, value, dep.index));
   }
   // Метод обновления текстового шаблона
@@ -1323,6 +1652,45 @@ var DOMManager = class {
     if (this.virtualDom.get(node) !== newContent) {
       node.textContent = newContent;
       this.virtualDom.set(node, newContent);
+    }
+  }
+  parseAttributeBindings(rootElement) {
+    const allElements = rootElement.querySelectorAll("*");
+    for (const element of allElements) {
+      const attributes = element.attributes;
+      for (let i = 0; i < attributes.length; i++) {
+        const attr = attributes[i];
+        if (attr.name.startsWith(":")) {
+          const realAttrName = attr.name.substring(1);
+          const expression = attr.value;
+          this.updateElementAttribute(element, realAttrName, expression);
+          this.registerDomDependency(expression, element, {
+            type: "attribute",
+            attribute: realAttrName,
+            expression
+          });
+          element.removeAttribute(attr.name);
+        }
+      }
+    }
+  }
+  // Метод для обновления атрибута элемента
+  updateElementAttribute(element, attribute, expression) {
+    const value = this.model.store.get(expression);
+    if (value !== void 0) {
+      if (attribute === "class") {
+        element.className = value;
+      } else if (attribute === "disabled" || attribute === "checked" || attribute === "selected" || attribute === "readonly") {
+        if (value) {
+          element.setAttribute(attribute, "");
+        } else {
+          element.removeAttribute(attribute);
+        }
+      } else {
+        element.setAttribute(attribute, value);
+      }
+    } else {
+      console.warn(`\u0417\u043D\u0430\u0447\u0435\u043D\u0438\u0435 \u0434\u043B\u044F ${expression} \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E \u0432 \u043C\u043E\u0434\u0435\u043B\u0438`);
     }
   }
   // Проверяет, зависит ли путь pathB от пути pathA
@@ -1342,7 +1710,8 @@ var DOMManager = class {
   bindDOM(rootElement) {
     this.loopManager.parseLoops(rootElement);
     this.conditionalManager.parseConditionals(rootElement);
-    this.conditionalManager.parseAttributes(rootElement);
+    this.attributeManager.parseAttributes(rootElement);
+    this.parseAttributeBindings(rootElement);
     this.parse(rootElement);
     this.updateAllDOM();
   }
@@ -1486,7 +1855,8 @@ var ModelOptions = {
   id: "model",
   memoizeComputed: true
 };
-var Model = class extends event_emitter_default {
+var Model = class _Model extends event_emitter_default {
+  static plugins = /* @__PURE__ */ new Map();
   constructor(data = {}, options = {}) {
     super();
     this.options = Object.assign({}, ModelOptions, options);
@@ -1497,14 +1867,13 @@ var Model = class extends event_emitter_default {
           getter: data[key],
           value: null,
           dependencies: []
-          // Буде заповнено під час першого виклику
         };
         delete data[key];
       }
     }
-    this.dom = new DOMManager(this);
     this.store = new ReactiveStore(data);
     this.data = this.store.state;
+    this.dom = new DOMManager(this);
     this.computedProps = new ComputedProps(this, this.computed);
     this.subscribe();
     this.computedProps.init();
@@ -1516,22 +1885,23 @@ var Model = class extends event_emitter_default {
       this.computedProps.update(data.path);
     });
   }
-  // Додаємо валідацію
+  // Add validation
   addValidator(path, validator) {
     this.store.addValidator(path, validator);
   }
-  // Додаємо форматування
+  // Add formatting
   addFormatter(path, formatter) {
     this.store.addFormatter(path, formatter);
   }
-  // Додаємо middleware
+  // Add Middleware
   use(middleware) {
     this.store.use(middleware);
   }
+  // Add the watcher
   watch(path, callback) {
     this.store.watch(path, callback);
   }
-  // Ініціюємо модель на відповідному DOM елементі
+  // We initiate the model on the appropriate Dom element
   init(selector) {
     const rootElement = typeof selector === "string" ? document.querySelector(selector) : selector;
     if (!rootElement) {
@@ -1542,9 +1912,23 @@ var Model = class extends event_emitter_default {
     this.emit("init");
     return this;
   }
-  // Ініціюємо DevTools
+  // We initiate devtools
   initDevTools(options = {}) {
     return new dev_tools_default(this, options);
+  }
+  static registerPlugin(name, plugin) {
+    if (this.plugins.has(name)) {
+      throw new Error(`Plugin ${name} already registered`);
+    }
+    this.plugins.set(name, plugin);
+  }
+  usePlugin(name, options = {}) {
+    const Plugin = _Model.plugins.get(name);
+    if (!Plugin) {
+      console.error(`Plugin ${name} not found`);
+    }
+    new Plugin(this, options);
+    return this;
   }
   destroy() {
     this.dom.destroy();
@@ -1556,7 +1940,7 @@ var model_default = Model;
 
 // src/index.js
 var version = "0.11.0";
-var build_time = "03.03.2025, 11:28:57";
+var build_time = "03.03.2025, 16:03:15";
 model_default.info = () => {
   console.info(`%c Model %c v${version} %c ${build_time} `, "color: white; font-weight: bold; background: #0080fe", "color: white; background: darkgreen", "color: white; background: #0080fe;");
 };

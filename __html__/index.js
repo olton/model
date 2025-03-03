@@ -1,7 +1,8 @@
 import Model from "../src/index.js";
+
 Model.info()
 const app = new Model({
-    counter: 10,
+    counter: 0,
     status() {
         return this.counter === 0 ? "Zero" : this.counter > 0 ? "Positive" : "Negative";
     },
@@ -15,7 +16,7 @@ const app = new Model({
         age: 30,
         items: ["Item 1", "Item 2", "Item 3"],
     },
-    fullAddress(){
+    fullAddress() {
         return `${this.user.address.city}, ${this.user.address.country}`;
     },
     data: {
@@ -30,6 +31,11 @@ const app = new Model({
 app.init("#root")
 
 globalThis.updateCounter = (operator) => {
+    if (app.data.counter <= 0) {
+        app.data.is_disabled = true
+    } else {
+        app.data.is_disabled = false
+    }
     operator === "-" ? app.data.counter-- : app.data.counter++
 }
 

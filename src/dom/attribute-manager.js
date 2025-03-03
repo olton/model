@@ -6,7 +6,7 @@ export default class AttributeManager {
         this.model = model;
     }
     
-    // Парсим DOM для поиска атрибутов с привязками
+    // Parse DOM to search for attributes with bindings
     parseAttributes(rootElement) {
         const elements = rootElement.querySelectorAll('[data-bind]');
 
@@ -17,10 +17,10 @@ export default class AttributeManager {
                 const bindings = JSON.parse(bindingExpression.replace(/'/g, '"'));
 
                 for (const [attributeName, expression] of Object.entries(bindings)) {
-                    // Извлекаем переменные из выражения
+                    // We extract variables from expression
                     const variables = extractVariables(expression);
 
-                    // Регистрируем зависимости
+                    // We register dependencies
                     variables.forEach(variable => {
                         this.domManager.registerDomDependency(variable, element, {
                             type: 'attribute',
@@ -29,36 +29,36 @@ export default class AttributeManager {
                         });
                     });
 
-                    // Начальное обновление атрибута
+                    // The initial renewal of the attribute
                     this.updateAttribute(element, attributeName, expression);
                 }
             } catch (error) {
-                console.error('Ошибка разбора привязок атрибутов:', error);
+                console.error('An error of analysis of attachments:', error);
             }
         });
     }
 
-    // Метод для обновления атрибута на основе выражения
+    // A method for updating the attribute based on expression
     updateAttribute(element, attributeName, expression) {
-        // Вычисляем значение выражения
+        // We calculate the value of the expression
         const context = {...this.model.store.getState()};
         let value;
 
         if (expression.startsWith('{{') && expression.endsWith('}}')) {
-            // Если это шаблон {{выражение}}
+            // If this template {{ expression }}
             const path = expression.substring(2, expression.length - 2).trim();
             value = this.model.store.get(path);
         } else {
-            // Если это JavaScript выражение
+            // If it is JavaScript expression
             value = evaluateExpression(expression, context);
         }
 
-        // Запоминаем предыдущее значение для предотвращения лишних обновлений DOM
+        // We remember the previous value to prevent excess Dom updates
         const previousValue = element.getAttribute(attributeName);
 
-        // Обновляем атрибут только если значение изменилось
+        // We update the attribute only if the value has changed
         if (String(value) !== previousValue) {
-            // Особая обработка для boolean-атрибутов
+            // Special processing for Boolean Atrictens
             if (value === false || value === null || value === undefined) {
                 element.removeAttribute(attributeName);
             } else if (value === true) {

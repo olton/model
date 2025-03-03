@@ -42,12 +42,16 @@ const DevToolsStyle = `
             bottom: 10px;
             right: 10px;
             z-index: 9998;
-            padding: 5px 10px;
+            height: 36px;
+            width: 36px;
             background: #444;
             color: white;
             border: none;
             border-radius: 4px;
             cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }        
 
         #model-devtools-time-travel-dialog {

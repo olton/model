@@ -15,7 +15,7 @@ export default class DOMManager {
         this.attributeManager = new AttributeManager(this, model);
     }
 
-    // Регистрация зависимости DOM от свойства
+    // Registration Dependencies DOM on Properties
     registerDomDependency(propertyPath, domElement, info) {
         if (!this.domDependencies.has(propertyPath)) {
             this.domDependencies.set(propertyPath, new Set());
@@ -26,7 +26,7 @@ export default class DOMManager {
         });
     }
     
-    // Обработка шаблонных узлов
+    // Processes template adverbs
     processTemplateNode(node, context) {
         if (node.nodeType === Node.TEXT_NODE) {
             const originalText = node.textContent;
@@ -38,14 +38,14 @@ export default class DOMManager {
                 node.textContent = newText;
             }
         } else if (node.nodeType === Node.ELEMENT_NODE) {
-            // Обработка дочерних элементов
+            // Processing of subsidiary elements
             Array.from(node.childNodes).forEach(child => {
                 this.processTemplateNode(child, context);
             });
         }
     }
 
-    // Парсим DOM для поиска выражений {{ переменная }}
+    // Parsim DOM to search for expressions {{variable}}
     parse(root) {
         const walker = document.createTreeWalker(
             root,
@@ -67,13 +67,13 @@ export default class DOMManager {
             while ((match = regex.exec(text)) !== null) {
                 const propPath = match[1].trim();
 
-                // Регистрируем зависимость
+                // We register the dependence
                 this.registerDomDependency(propPath, node, {
                     type: 'template',
                     template: originalText
                 });
 
-                // Для совместимости с существующим кодом
+                // For compatibility with existing code
                 this.elements.push({
                     node,
                     propName: propPath,
@@ -81,16 +81,16 @@ export default class DOMManager {
                 });
             }
 
-            // Сохраняем начальное состояние в virtualDom
+            // We keep the initial state in Virtualdom
             this.virtualDom.set(node, node.textContent);
         }
 
-        // Находим все input-элементы с атрибутом data-model
+        // We find all Input elements with the Data-Model attribute
         const inputs = root.querySelectorAll('[data-model]');
         inputs.forEach(input => {
             const property = input.getAttribute('data-model');
 
-            // Создаем обработчик и сохраняем на элементе
+            // Create a handler and save on an element
             const handler = (e) => {
                 const value = input.type === 'checkbox' || input.type === 'radio'
                     ? e.target.checked
@@ -99,7 +99,7 @@ export default class DOMManager {
                 this.model.store.set(property, value);
             };
 
-            // Сохраняем ссылку на обработчик для возможности удаления
+            // We keep a link to the handle for the possibility of removing
             input.__modelInputHandler = handler;
 
             input.addEventListener('input', handler);
@@ -111,7 +111,7 @@ export default class DOMManager {
         });
     }
 
-    // Установка значения в input-элемент
+    // Setting the value in the Input element
     setInputValue(input, value) {
         if (input.type === 'checkbox' || input.type === 'radio') {
             input.checked = Boolean(value);
@@ -120,7 +120,7 @@ export default class DOMManager {
         }
     }
 
-    // Обновление значений в input-элементах при изменении данных модели
+    // Updating values in Input-elements when changing these models
     updateInputs(propName, value) {
         this.inputs.forEach(item => {
             if (item.property === propName) {
@@ -129,9 +129,9 @@ export default class DOMManager {
         });
     }
 
-    // Обновляем элементы DOM, которые нуждаются в этом
+    // We update the DOM elements that need this
     updateAllDOM() {
-        // Обновляем все элементы с шаблонами
+        // Update all the elements with templates
         this.elements.forEach(element => {
             let newContent = element.template;
             newContent = newContent.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
@@ -141,24 +141,24 @@ export default class DOMManager {
             element.node.textContent = newContent;
         });
 
-        // Обновляем все инпуты
+        // We update all the inputs
         this.inputs.forEach(item => {
             const value = this.model.store.get(item.property);
             this.setInputValue(item.element, value);
         });
     }
 
-    // Обновление DOM при изменении данных
+    // DOM update when changing data
     updateDOM(propertyPath, value) {
-        // Проверяем, является ли это объектом изменения из applyArrayMethod
+        // We check whether this is an object of change from ApplyarrayMethod
         const isArrayMethodChange = value && typeof value === 'object' && 'method' in value;
 
         if (isArrayMethodChange) {
-            // Используем path из объекта изменения при изменении массива
+            // We use PATH from the object of change when changing the array
             propertyPath = value.path || propertyPath;
         }
 
-        // Находим все зависимые элементы - прямые и ассоциированные с родительскими путями
+        // We find all dependent elements - direct and associated with parental ways
         const elementsToUpdate = new Set();
 
         // Добавляем прямые совпадения

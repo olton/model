@@ -9,9 +9,8 @@ export default class ConditionalManager {
     }
 
     subscribe() {
-        // console.log(this.model.store);
         this.model.store.on('change', (data) => {
-            // Обновляем все группы условных директив, зависящие от измененного пути
+            // We update all groups of conditional directives, depending on the changed path
             const dependentGroups = this.getGroupsByPath(data.path);
             dependentGroups.forEach(group => {
                 this.updateConditionalGroup(group);
@@ -19,7 +18,7 @@ export default class ConditionalManager {
         });
     }
 
-    // Получение групп, зависящих от указанного пути
+    // Obtaining groups depending on the specified path
     getGroupsByPath(path) {
         const result = new Set();
 
@@ -27,7 +26,7 @@ export default class ConditionalManager {
             const hasDependency = group.some(item => {
                 if (!item.expression) return false;
 
-                // Проверяем, содержит ли выражение указанный путь
+                // We check whether the expression contains the specified path
                 return item.expression.includes(path) ||
                     path.startsWith(this.extractBasePath(item.expression));
             });
@@ -40,23 +39,23 @@ export default class ConditionalManager {
         return Array.from(result);
     }
 
-    // Извлечение базового пути из выражения (например, из "counter > 0" извлекаем "counter")
+    // Extracting the basic path from expression (for example, from "Counter> 0" extract "Counter")
     extractBasePath(expression) {
         const matches = expression.match(/[a-zA-Z_][a-zA-Z0-9_]*/g);
         return matches ? matches[0] : '';
     }
     
     parseConditionals(rootElement) {
-        // Находим все элементы с условными директивами в порядке их следования в DOM
+        // We find all elements with conditional directives in the order of their following in Dom
         const nodes = rootElement.querySelectorAll('[data-if],[data-else-if],[data-else]');
 
-        // Группируем связанные условные элементы
+        // We group related conditional elements
         let currentGroup = [];
         const groups = [];
 
         nodes.forEach(node => {
             if (node.hasAttribute('data-if')) {
-                // Если нашли новый data-if, начинаем новую группу
+                // if found new data-if, We begin a new group
                 if (currentGroup.length) {
                     groups.push(currentGroup);
                 }
@@ -66,7 +65,7 @@ export default class ConditionalManager {
                     expression: node.getAttribute('data-if')
                 }];
             } else if (node.hasAttribute('data-else-if')) {
-                // Проверяем, что это продолжение текущей группы
+                // We check that this is a continuation of the current group
                 if (currentGroup.length && this.isAdjacentNode(currentGroup[currentGroup.length-1].element, node)) {
                     currentGroup.push({
                         element: node,
@@ -74,18 +73,18 @@ export default class ConditionalManager {
                         expression: node.getAttribute('data-else-if')
                     });
                 } else {
-                    // Если это не продолжение, начинаем новую группу (обрабатываем как if)
+                    // If this is not a continuation, we start a new group (we process as if)
                     if (currentGroup.length) {
                         groups.push(currentGroup);
                     }
                     currentGroup = [{
                         element: node,
-                        type: 'if', // Рассматриваем как обычный if
+                        type: 'if', // We consider it as a regular if
                         expression: node.getAttribute('data-else-if')
                     }];
                 }
             } else if (node.hasAttribute('data-else')) {
-                // Проверяем, что это продолжение текущей группы
+                // We check that this is a continuation of the current group
                 if (currentGroup.length && this.isAdjacentNode(currentGroup[currentGroup.length-1].element, node)) {
                     currentGroup.push({
                         element: node,
@@ -93,32 +92,32 @@ export default class ConditionalManager {
                         expression: null
                     });
 
-                    // else всегда завершает группу
+                    // else Always completes the group
                     groups.push(currentGroup);
                     currentGroup = [];
                 } else {
-                    // Если это не продолжение, игнорируем (else должен следовать за if/else-if)
+                    // If this is not a continuation, we ignore (Else should follow the if/else-line)
                     console.warn('data-else без предшествующего data-if или data-else-if', node);
                 }
             }
         });
 
-        // Добавляем последнюю группу, если она есть
+        // Add the last group if it is
         if (currentGroup.length) {
             groups.push(currentGroup);
         }
 
-        // Обновляем каждую группу условных элементов
+        // We update each group of conventional elements
         this.conditionalGroups = groups;
         groups.forEach(group => this.updateConditionalGroup(group));
 
-        // Настраиваем карту зависимостей
+        // We set up a dependence card
         this.setupDependencies(nodes);
     }
 
-    // Проверяет, являются ли узлы соседними в DOM
+    // Checks whether the nodes are neighboring Dom
     isAdjacentNode(node1, node2) {
-        // Проверяем, что node2 идет сразу после node1 или разделен только пробельными узлами
+        // We check that Node2 is immediately after Node1 or is separated only
         let current = node1.nextSibling;
         while (current) {
             if (current === node2) return true;
@@ -128,13 +127,13 @@ export default class ConditionalManager {
         return false;
     }
 
-    // Проверяет, является ли узел пробельным
+    // Checks whether the knot is a sample
     isWhitespaceNode(node) {
         return node.nodeType === 3 && node.textContent.trim() === '';
     }
 
     updateConditionalGroup(group) {
-        // Получаем состояние из модели безопасным способом
+        // We get a condition from the model in a safe way
         const context = this.model && this.model.store ?
             {...this.model.store.getState()} :
             this.model && this.model.data ? this.model.data : {};
@@ -143,31 +142,31 @@ export default class ConditionalManager {
 
         for (const item of group) {
             if (item.type === 'if' || item.type === 'else-if') {
-                // Вычисляем условие только если предыдущие не сработали
+                // We calculate the condition only if the previous ones did not work
                 const result = !conditionMet && this.evaluateExpression(item.expression, context);
 
                 if (result) {
-                    // Показываем этот элемент
+                    // Show this element
                     item.element.style.display = '';
                     conditionMet = true;
                 } else {
-                    // Скрываем элемент
+                    // We hide the element
                     item.element.style.display = 'none';
                 }
             } else if (item.type === 'else') {
-                // Показываем else только если ни одно из предыдущих условий не сработало
+                // Show ELSE only if none of the previous conditions has worked
                 item.element.style.display = conditionMet ? 'none' : '';
             }
         }
     }
 
     updateConditional(element, expression) {
-        // Обновляем всю группу, если элемент входит в группу
+        // Update the entire group if the element is included in the group
         const group = this.findGroupForElement(element);
         if (group) {
             this.updateConditionalGroup(group);
         } else {
-            // Для одиночных if-элементов
+            // For single if elements
             const context = this.model && this.model.store ?
                 {...this.model.store.getState()} :
                 this.model && this.model.data ? this.model.data : {};
@@ -178,7 +177,7 @@ export default class ConditionalManager {
     }
 
     findGroupForElement(element) {
-        // Находим группу, содержащую данный элемент
+        // We find a group containing this element
         for (const group of this.conditionalGroups || []) {
             if (group.some(item => item.element === element)) {
                 return group;
@@ -198,7 +197,7 @@ export default class ConditionalManager {
             } else if (element.hasAttribute('data-else-if')) {
                 expression = element.getAttribute('data-else-if');
             } else {
-                return; // data-else не имеет выражения
+                return; // data-else It has no expression
             }
 
             const variables = this.extractVariables(expression);
@@ -218,8 +217,7 @@ export default class ConditionalManager {
     }
 
     extractVariables(expression) {
-        // Простой вариант извлечения переменных из выражения
-        // Можно улучшить для сложных выражений
+        // A simple option for extracting variables from expression
         const variables = [];
         const parts = expression.split(/[^a-zA-Z0-9_.]/);
 
@@ -250,13 +248,13 @@ export default class ConditionalManager {
         return result;
     }
 
-    // Безопасная оценка выражений
+    // Safe assessment of expressions
     evaluateExpression(expression, context) {
         try {
-            // Проверка на шаблоны {{path}}
+            // Checking on templates {{PATH}}
             if (expression.startsWith('{{') && expression.endsWith('}}')) {
                 const path = expression.substring(2, expression.length - 2).trim();
-                return this.getValueByPath(context, path);
+                return this.getValueFromContext(context, path);
             }
 
             return this.parseExpression(expression, context);
@@ -266,8 +264,8 @@ export default class ConditionalManager {
         }
     }
 
-    // Получение значения по пути в объекте
-    getValueByPath(obj, path) {
+    // Obtaining a value along the way in the object
+    getValueFromContext(obj, path) {
         if (!path) return obj;
 
         return path.split('.').reduce((acc, part) => {
@@ -282,11 +280,11 @@ export default class ConditionalManager {
         }, obj);
     }
 
-    // Безопасный парсинг выражений
+    // Safe Parsing expressions
     parseExpression(expression, context) {
         expression = expression.trim();
 
-        // Обработка тернарного оператора
+        // Processing of a thorns operator
         const ternaryMatch = expression.match(/(.+?)\s*\?\s*(.+?)\s*:\s*(.+)/);
         if (ternaryMatch) {
             const [_, condition, trueExpr, falseExpr] = ternaryMatch;
@@ -295,7 +293,7 @@ export default class ConditionalManager {
                 : this.parseExpression(falseExpr, context);
         }
 
-        // Логические операторы
+        // Logic operators
         if (expression.includes('&&')) {
             const parts = expression.split('&&');
             return parts.every(part => this.parseExpression(part.trim(), context));
@@ -306,7 +304,7 @@ export default class ConditionalManager {
             return parts.some(part => this.parseExpression(part.trim(), context));
         }
 
-        // Операторы сравнения
+        // Comparison operators
         const comparisonMatch = expression.match(/(.+?)\s*(===|==|!==|!=|>=|<=|>|<)\s*(.+)/);
         if (comparisonMatch) {
             const [_, left, operator, right] = comparisonMatch;
@@ -325,25 +323,25 @@ export default class ConditionalManager {
             }
         }
 
-        // Строковые литералы
+        // String literals
         if ((expression.startsWith("'") && expression.endsWith("'")) ||
             (expression.startsWith('"') && expression.endsWith('"'))) {
             return expression.substring(1, expression.length - 1);
         }
 
-        // Числовые литералы
+        // Numerical literals
         if (/^-?\d+(\.\d+)?$/.test(expression)) {
             return parseFloat(expression);
         }
 
-        // Булевы литералы и null/undefined
+        // Boolean Literals and null/undefined
         if (expression === 'true') return true;
         if (expression === 'false') return false;
         if (expression === 'null') return null;
         if (expression === 'undefined') return undefined;
 
-        // Получение значения из контекста
-        return this.getValueByPath(context, expression);
+        // Obtaining a value from context
+        return this.getValueFromContext(context, expression);
     }
     
     destroy() {

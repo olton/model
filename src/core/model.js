@@ -11,19 +11,21 @@ const ModelOptions = {
 }
 
 class Model extends EventEmitter {
+    static plugins = new Map();
+
     constructor(data = {}, options = {}) {
         super();
        
         this.options = Object.assign({}, ModelOptions, options);
         this.computed = {};
 
-        // Реєструємо обчислювані властивості
+        // We register the calculated properties
         for (const key in data) {
             if (typeof data[key] === 'function') {
                 this.computed[key] = {
                     getter: data[key],
                     value: null,
-                    dependencies: [] // Буде заповнено під час першого виклику
+                    dependencies: [] 
                 };
                 delete data[key];
             }
@@ -45,26 +47,27 @@ class Model extends EventEmitter {
         });
     }
     
-    // Додаємо валідацію
+    // Add validation
     addValidator(path, validator) {
         this.store.addValidator(path, validator);
     }
 
-    // Додаємо форматування
+    // Add formatting
     addFormatter(path, formatter) {
         this.store.addFormatter(path, formatter);
     }
 
-    // Додаємо middleware
+    // Add Middleware
     use(middleware) {
         this.store.use(middleware);        
     }
     
+    // Add the watcher
     watch(path, callback) {
         this.store.watch(path, callback);
     }
 
-    // Ініціюємо модель на відповідному DOM елементі
+    // We initiate the model on the appropriate Dom element
     init(selector) {
         const rootElement = typeof selector === 'string'
             ? document.querySelector(selector)
@@ -82,20 +85,33 @@ class Model extends EventEmitter {
         return this;
     }
 
-    // Ініціюємо DevTools
+    // We initiate devtools
     initDevTools(options = {}) {
         return new DevTools(this, options);
     }
+
+    static registerPlugin(name, plugin) {
+        if (this.plugins.has(name)) {
+            throw new Error(`Plugin ${name} already registered`);
+        }
+        this.plugins.set(name, plugin);
+    }
     
+    usePlugin(name, options = {}) {
+        const Plugin = Model.plugins.get(name);
+        if (!Plugin) {
+            console.error(`Plugin ${name} not found`);
+        }
+        new Plugin(this, options);
+        return this;
+    }
+
     destroy() {
         this.dom.destroy();
         this.store.destroy();        
         
         // Викликаємо подію для додаткового очищення
         this.emit('destroy');
-
-        // Очищаємо всіх слухачів подій
-        // this.removeAllEventListeners();
     }
 }
 
