@@ -15,6 +15,11 @@
 <body>
 <div id="root">
 <h1>Counter</h1>
+    <hr/>
+    <img :src="path_to_image" alt="Изображение">
+    <button :disabled="is_disabled">Кнопка</button>
+    <hr/>
+    
     <div data-for="item in items">
         Item: {{ item }}
     </div>

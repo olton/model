@@ -22,7 +22,9 @@ const app = new Model({
         name: "John Doe",
         age: 20,
         address: "New York, USA"
-    }
+    },
+    path_to_image: "https://picsum.photos/id/1/200/300",
+    is_disabled: true,
 })
 
 app.init("#root")

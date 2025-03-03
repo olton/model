@@ -166,6 +166,16 @@ export default class DOMManager {
             this.domDependencies.get(propertyPath).forEach(dep =>
                 elementsToUpdate.add(dep)
             );
+            const deps = this.domDependencies.get(propertyPath);
+            for (const { element, meta } of deps) {
+                // Обрабатываем разные типы зависимостей
+                switch (meta.type) {
+                    case 'attribute':
+                        // Обработка атрибутов
+                        this.updateElementAttribute(element, meta.attribute, meta.expression);
+                        break;
+                }
+            }
         }
 
         // Добавляем элементы, зависящие от родительского пути
@@ -239,6 +249,69 @@ export default class DOMManager {
         }
     }
 
+    parseAttributeBindings(rootElement) {
+        // Получаем все элементы внутри rootElement
+        const allElements = rootElement.querySelectorAll('*');
+
+        // Обходим все элементы
+        for (const element of allElements) {
+            // Получаем все атрибуты элемента
+            const attributes = element.attributes;
+
+            for (let i = 0; i < attributes.length; i++) {
+                const attr = attributes[i];
+
+                // Проверяем, начинается ли имя атрибута с двоеточия (:)
+                if (attr.name.startsWith(':')) {
+                    // Получаем реальное имя атрибута (без двоеточия)
+                    const realAttrName = attr.name.substring(1);
+
+                    // Получаем выражение из значения атрибута
+                    const expression = attr.value;
+
+                    // Устанавливаем начальное значение атрибута
+                    this.updateElementAttribute(element, realAttrName, expression);
+
+                    // Регистрируем зависимость для обновления атрибута при изменении данных
+                    this.registerDomDependency(expression, element, {
+                        type: 'attribute',
+                        attribute: realAttrName,
+                        expression: expression
+                    });
+
+                    // Удаляем директиву :attribute
+                    element.removeAttribute(attr.name);
+                }
+            }
+        }
+    }
+
+    // Метод для обновления атрибута элемента
+    updateElementAttribute(element, attribute, expression) {
+        const value = this.model.store.get(expression);
+
+        if (value !== undefined) {
+            // Обрабатываем особые случаи для некоторых атрибутов
+            if (attribute === 'class') {
+                element.className = value;
+            } else if (attribute === 'disabled' ||
+                attribute === 'checked' ||
+                attribute === 'selected' ||
+                attribute === 'readonly') {
+                // Булевы атрибуты
+                if (value) {
+                    element.setAttribute(attribute, '');
+                } else {
+                    element.removeAttribute(attribute);
+                }
+            } else {
+                element.setAttribute(attribute, value);
+            }
+        } else {
+            console.warn(`Значение для ${expression} не найдено в модели`);
+        }
+    }
+
     // Проверяет, зависит ли путь pathB от пути pathA
     isPathDependency(pathA, pathB) {
         return pathB === pathA ||
@@ -261,6 +334,8 @@ export default class DOMManager {
         this.loopManager.parseLoops(rootElement);
         this.conditionalManager.parseConditionals(rootElement);
         this.attributeManager.parseAttributes(rootElement);
+        // Обработка атрибутов (:attribute)
+        this.parseAttributeBindings(rootElement);
         this.parse(rootElement);
         this.updateAllDOM();
     }

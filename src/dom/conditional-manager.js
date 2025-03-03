@@ -345,4 +345,9 @@ export default class ConditionalManager {
         // Получение значения из контекста
         return this.getValueByPath(context, expression);
     }
+    
+    destroy() {
+        this.dependencies.clear();
+        this.conditionalGroups = [];
+    }
 }
