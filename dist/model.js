@@ -979,23 +979,38 @@ var ReactiveStore = class extends event_emitter_default {
   createArrayProxy(array, path) {
     return new Proxy(array, {
       get: (target, prop) => {
+        if (typeof prop === "symbol") {
+          return target[prop];
+        }
         const value = target[prop];
         if (typeof value === "function" && ["push", "pop", "shift", "unshift", "splice", "sort", "reverse"].includes(prop)) {
           return (...args) => {
-            const oldArray = [...target];
+            const oldValue = [...target];
             const result = target[prop].apply(target, args);
-            this.emit("arrayChange", {
-              path,
+            const context = {
+              prop: path,
+              oldValue,
+              newValue: target,
               method: prop,
               args,
-              oldValue: oldArray,
-              newValue: [...target]
+              preventDefault: false
+            };
+            this.middleware.process(context).then(() => {
+              if (!context.preventDefault) {
+                this.emit("change", {
+                  path,
+                  oldValue,
+                  newValue: target,
+                  method: prop,
+                  args
+                });
+                if (this.watchers.has(path)) {
+                  this.watchers.get(path).forEach((callback) => {
+                    callback(target, oldValue);
+                  });
+                }
+              }
             });
-            if (this.watchers.has(path)) {
-              this.watchers.get(path).forEach((callback) => {
-                callback([...target], oldArray);
-              });
-            }
             return result;
           };
         }
@@ -1011,17 +1026,19 @@ var ReactiveStore = class extends event_emitter_default {
           target[prop] = value;
           return true;
         }
+        const fullPath = path ? `${path}.${prop}` : prop;
         const oldValue = target[prop];
         if (oldValue === value) {
           return true;
         }
-        if (this.validators?.has(`${path}.${prop}`)) {
-          const isValid = this.validators.get(`${path}.${prop}`)(value);
+        if (this.validators?.has(fullPath)) {
+          const isValid = this.validators.get(fullPath)(value);
           if (!isValid) return false;
         }
-        if (this.formatters?.has(`${path}.${prop}`)) {
-          value = this.formatters.get(`${path}.${prop}`)(value);
+        if (this.formatters?.has(fullPath)) {
+          value = this.formatters.get(fullPath)(value);
         }
+        target[prop] = value;
         if (value && typeof value === "object") {
           value = this.createReactiveProxy(value, `${path}[${prop}]`);
         }
@@ -1036,17 +1053,21 @@ var ReactiveStore = class extends event_emitter_default {
           return true;
         }
         target[prop] = value;
-        this.emit("change", {
-          path: `${path}[${prop}]`,
-          oldValue,
-          newValue: value,
-          arrayIndex: Number(prop)
+        this.middleware.process(context).then(() => {
+          if (!context.preventDefault) {
+            this.emit("change", {
+              path: fullPath,
+              oldValue,
+              newValue: value,
+              arrayIndex: Number(prop)
+            });
+            if (this.watchers.has(fullPath)) {
+              this.watchers.get(fullPath).forEach((callback) => {
+                callback(value, oldValue);
+              });
+            }
+          }
         });
-        if (this.watchers.has(path)) {
-          this.watchers.get(path).forEach((callback) => {
-            callback([...target], void 0);
-          });
-        }
         return true;
       }
     });
@@ -1689,6 +1710,9 @@ var ConditionalManager = class {
    * @private
    */
   getGroupsByPath(path) {
+    if (!path) {
+      return [];
+    }
     const result = /* @__PURE__ */ new Set();
     this.conditionalGroups.forEach((group) => {
       const hasDependency = group.some((item) => {
@@ -2385,6 +2409,10 @@ var DOMManager = class {
    * @param {*} value - New value of the property (could be a primitive, object, or array).
    */
   updateDOM(propertyPath, value) {
+    if (!propertyPath) {
+      console.warn("Path is undefined in updateDOM");
+      return;
+    }
     const isArrayMethodChange = value && typeof value === "object" && "method" in value;
     if (isArrayMethodChange) {
       propertyPath = value.path || propertyPath;

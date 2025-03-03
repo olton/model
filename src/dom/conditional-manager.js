@@ -12,7 +12,7 @@
  * @property {Array} conditionalGroups - Group of DOM elements with conditional attributes.
  */
 export default class ConditionalManager {
-    
+
     /**
      * Initializes a new instance of the ConditionalManager class.
      *
@@ -25,7 +25,7 @@ export default class ConditionalManager {
         this.model = model;
         this.dependencies = new Map();
         this.conditionalGroups = [];
-        
+
         this.subscribe();
     }
 
@@ -41,7 +41,7 @@ export default class ConditionalManager {
      */
     subscribe() {
         this.model.store.on('change', (data) => {
-            
+
             const dependentGroups = this.getGroupsByPath(data.path);
             dependentGroups.forEach(group => {
                 this.updateConditionalGroup(group);
@@ -60,13 +60,16 @@ export default class ConditionalManager {
      * @private
      */
     getGroupsByPath(path) {
+        if (!path) {
+            return [];
+        }
+        
         const result = new Set();
 
         this.conditionalGroups.forEach(group => {
             const hasDependency = group.some(item => {
                 if (!item.expression) return false;
 
-                
                 return item.expression.includes(path) ||
                     path.startsWith(this.extractBasePath(item.expression));
             });
@@ -78,7 +81,6 @@ export default class ConditionalManager {
 
         return Array.from(result);
     }
-
 
     /**
      * Extracts the base path from an expression using regex pattern matching.
@@ -94,7 +96,6 @@ export default class ConditionalManager {
         const matches = expression.match(/[a-zA-Z_][a-zA-Z0-9_]*/g);
         return matches ? matches[0] : '';
     }
-    
 
     /**
      * Parses and creates a map of conditional elements (`data-if`, `data-else-if`, and `data-else`)
@@ -114,16 +115,15 @@ export default class ConditionalManager {
      * @public
      */
     parseConditionals(rootElement) {
-        
+
         const nodes = rootElement.querySelectorAll('[data-if],[data-else-if],[data-else]');
 
-        
         let currentGroup = [];
         const groups = [];
 
         nodes.forEach(node => {
             if (node.hasAttribute('data-if')) {
-                
+
                 if (currentGroup.length) {
                     groups.push(currentGroup);
                 }
@@ -133,57 +133,52 @@ export default class ConditionalManager {
                     expression: node.getAttribute('data-if')
                 }];
             } else if (node.hasAttribute('data-else-if')) {
-                
-                if (currentGroup.length && this.isAdjacentNode(currentGroup[currentGroup.length-1].element, node)) {
+
+                if (currentGroup.length && this.isAdjacentNode(currentGroup[currentGroup.length - 1].element, node)) {
                     currentGroup.push({
                         element: node,
                         type: 'else-if',
                         expression: node.getAttribute('data-else-if')
                     });
                 } else {
-                    
+
                     if (currentGroup.length) {
                         groups.push(currentGroup);
                     }
                     currentGroup = [{
                         element: node,
-                        type: 'if', 
+                        type: 'if',
                         expression: node.getAttribute('data-else-if')
                     }];
                 }
             } else if (node.hasAttribute('data-else')) {
-                
-                if (currentGroup.length && this.isAdjacentNode(currentGroup[currentGroup.length-1].element, node)) {
+
+                if (currentGroup.length && this.isAdjacentNode(currentGroup[currentGroup.length - 1].element, node)) {
                     currentGroup.push({
                         element: node,
                         type: 'else',
                         expression: null
                     });
 
-                    
                     groups.push(currentGroup);
                     currentGroup = [];
                 } else {
-                    
+
                     console.warn('data-else без предшествующего data-if или data-else-if', node);
                 }
             }
         });
 
-        
         if (currentGroup.length) {
             groups.push(currentGroup);
         }
 
-        
         this.conditionalGroups = groups;
         groups.forEach(group => this.updateConditionalGroup(group));
 
-        
         this.setupDependencies(nodes);
     }
 
-    
     /**
      * Checks if two DOM nodes are adjacent siblings, ignoring whitespace nodes.
      *
@@ -197,7 +192,7 @@ export default class ConditionalManager {
      * @private
      */
     isAdjacentNode(node1, node2) {
-        
+
         let current = node1.nextSibling;
         while (current) {
             if (current === node2) return true;
@@ -207,7 +202,6 @@ export default class ConditionalManager {
         return false;
     }
 
-    
     /**
      * Determines if a given DOM node is a whitespace text node.
      *
@@ -222,7 +216,6 @@ export default class ConditionalManager {
         return node.nodeType === 3 && node.textContent.trim() === '';
     }
 
-    
     /**
      * Evaluates and updates the visibility of elements within a group of conditionals.
      *
@@ -237,7 +230,7 @@ export default class ConditionalManager {
      *    - {string|null} expression: The conditional expression, null for 'else'.
      */
     updateConditionalGroup(group) {
-        
+
         const context = this.model && this.model.store ?
             {...this.model.store.getState()} :
             this.model && this.model.data ? this.model.data : {};
@@ -246,25 +239,24 @@ export default class ConditionalManager {
 
         for (const item of group) {
             if (item.type === 'if' || item.type === 'else-if') {
-                
+
                 const result = !conditionMet && this.evaluateExpression(item.expression, context);
 
                 if (result) {
-                    
+
                     item.element.style.display = '';
                     conditionMet = true;
                 } else {
-                    
+
                     item.element.style.display = 'none';
                 }
             } else if (item.type === 'else') {
-                
+
                 item.element.style.display = conditionMet ? 'none' : '';
             }
         }
     }
 
-    
     /**
      * Updates the visibility of DOM elements based on conditional expressions.
      *
@@ -281,12 +273,12 @@ export default class ConditionalManager {
      * Nodes are expected to contain attributes like `data-if`, `data-else-if`, or `data-else`.
      */
     updateConditional(element, expression) {
-        
+
         const group = this.findGroupForElement(element);
         if (group) {
             this.updateConditionalGroup(group);
         } else {
-            
+
             const context = this.model && this.model.store ?
                 {...this.model.store.getState()} :
                 this.model && this.model.data ? this.model.data : {};
@@ -295,7 +287,7 @@ export default class ConditionalManager {
             element.style.display = result ? '' : 'none';
         }
     }
-    
+
     /**
      * Finds and returns the group of conditional elements that contains the specified element.
      *
@@ -311,7 +303,7 @@ export default class ConditionalManager {
      *    - {string|null} expression: The conditional expression, null for 'else'.
      */
     findGroupForElement(element) {
-        
+
         for (const group of this.conditionalGroups || []) {
             if (group.some(item => item.element === element)) {
                 return group;
@@ -319,7 +311,7 @@ export default class ConditionalManager {
         }
         return null;
     }
-    
+
     /**
      * Sets up and configures the dependencies for the provided DOM nodes.
      *
@@ -341,7 +333,7 @@ export default class ConditionalManager {
             } else if (element.hasAttribute('data-else-if')) {
                 expression = element.getAttribute('data-else-if');
             } else {
-                return; 
+                return;
             }
 
             const variables = this.extractVariables(expression);
@@ -359,7 +351,7 @@ export default class ConditionalManager {
             });
         });
     }
-    
+
     /**
      * Extracts variables from a given expression string.
      *
@@ -372,7 +364,7 @@ export default class ConditionalManager {
      * Variables are returned in their base form (i.e., the part before any dot notation or brackets).
      */
     extractVariables(expression) {
-        
+
         const variables = [];
         const parts = expression.split(/[^a-zA-Z0-9_.]/);
 
@@ -391,7 +383,6 @@ export default class ConditionalManager {
         return variables;
     }
 
-    
     /**
      * Retrieves all dependencies related to a specific path.
      *
@@ -417,7 +408,6 @@ export default class ConditionalManager {
         return result;
     }
 
-    
     /**
      * Evaluates a given expression within a specific context.
      *
@@ -436,7 +426,7 @@ export default class ConditionalManager {
      */
     evaluateExpression(expression, context) {
         try {
-            
+
             if (expression.startsWith('{{') && expression.endsWith('}}')) {
                 const path = expression.substring(2, expression.length - 2).trim();
                 return this.getValueFromContext(context, path);
@@ -449,7 +439,6 @@ export default class ConditionalManager {
         }
     }
 
-    
     /**
      * Retrieves a value from a given context object based on a dot-separated path.
      *
@@ -477,7 +466,6 @@ export default class ConditionalManager {
         }, obj);
     }
 
-    
     /**
      * Parses and evaluates a given expression within a provided context.
      *
@@ -500,7 +488,6 @@ export default class ConditionalManager {
     parseExpression(expression, context) {
         expression = expression.trim();
 
-        
         const ternaryMatch = expression.match(/(.+?)\s*\?\s*(.+?)\s*:\s*(.+)/);
         if (ternaryMatch) {
             const [_, condition, trueExpr, falseExpr] = ternaryMatch;
@@ -509,7 +496,6 @@ export default class ConditionalManager {
                 : this.parseExpression(falseExpr, context);
         }
 
-        
         if (expression.includes('&&')) {
             const parts = expression.split('&&');
             return parts.every(part => this.parseExpression(part.trim(), context));
@@ -520,7 +506,6 @@ export default class ConditionalManager {
             return parts.some(part => this.parseExpression(part.trim(), context));
         }
 
-        
         const comparisonMatch = expression.match(/(.+?)\s*(===|==|!==|!=|>=|<=|>|<)\s*(.+)/);
         if (comparisonMatch) {
             const [_, left, operator, right] = comparisonMatch;
@@ -528,35 +513,39 @@ export default class ConditionalManager {
             const rightValue = this.parseExpression(right.trim(), context);
 
             switch (operator) {
-                case '==': return leftValue == rightValue;
-                case '===': return leftValue === rightValue;
-                case '!=': return leftValue != rightValue;
-                case '!==': return leftValue !== rightValue;
-                case '>': return leftValue > rightValue;
-                case '<': return leftValue < rightValue;
-                case '>=': return leftValue >= rightValue;
-                case '<=': return leftValue <= rightValue;
+                case '==':
+                    return leftValue == rightValue;
+                case '===':
+                    return leftValue === rightValue;
+                case '!=':
+                    return leftValue != rightValue;
+                case '!==':
+                    return leftValue !== rightValue;
+                case '>':
+                    return leftValue > rightValue;
+                case '<':
+                    return leftValue < rightValue;
+                case '>=':
+                    return leftValue >= rightValue;
+                case '<=':
+                    return leftValue <= rightValue;
             }
         }
 
-        
         if ((expression.startsWith("'") && expression.endsWith("'")) ||
             (expression.startsWith('"') && expression.endsWith('"'))) {
             return expression.substring(1, expression.length - 1);
         }
 
-        
         if (/^-?\d+(\.\d+)?$/.test(expression)) {
             return parseFloat(expression);
         }
 
-        
         if (expression === 'true') return true;
         if (expression === 'false') return false;
         if (expression === 'null') return null;
         if (expression === 'undefined') return undefined;
 
-        
         return this.getValueFromContext(context, expression);
     }
 

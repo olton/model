@@ -37,7 +37,6 @@ class EventEmitter {
         }
         this.events.get(eventName).add(callback);
 
-
         return () => this.off(eventName, callback);
     }
 

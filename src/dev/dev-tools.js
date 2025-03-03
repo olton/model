@@ -15,10 +15,7 @@ class ModelDevTools {
     constructor(model, options = {}) {
         this.model = model;
         this.options = {
-            enabled: true,
-            timeTravel: true,
-            maxSnapshots: 50,
-            ...options
+            enabled: true, timeTravel: true, maxSnapshots: 50, ...options
         };
 
         this.history = [];
@@ -26,7 +23,6 @@ class ModelDevTools {
 
         this.initializeDevTools();
     }
-
 
     /**
      * Initializes the model development tools by:
@@ -39,7 +35,6 @@ class ModelDevTools {
         this.createDevToolsPanel();
         this.setupModelListeners();
     }
-
 
     /**
      * Creates the development tools panel in the DOM with:
@@ -85,7 +80,6 @@ class ModelDevTools {
         document.getElementById('devtools-time-travel').onclick = () => this.showTimeTravelDialog();
     }
 
-
     /**
      * Displays the Time Travel dialog by:
      * - Creating or reusing existing dialog container
@@ -101,16 +95,12 @@ class ModelDevTools {
             dialog.id = "model-devtools-time-travel-dialog";
         }
 
-
         const statesList = [...this.history].reverse().map((snapshot, index) => `
             <div class="time-travel-item">
                 <div>Time: ${new Date(snapshot.timestamp).toLocaleTimeString()}</div>
                 <div>Type: ${snapshot.type}</div>
                 <div>Property: ${snapshot.property || snapshot.event || snapshot.path || ''}</div>
-                <div>Value: ${snapshot.type === "computed-update" ? snapshot.newValue :
-            typeof snapshot.oldValue !== 'undefined' && typeof snapshot.newValue !== 'undefined' ?
-                `${JSON.stringify(snapshot.oldValue)} -> ${JSON.stringify(snapshot.newValue)}` :
-                JSON.stringify(snapshot.newValue || snapshot.value || '')}</div>
+                <div>Value: ${snapshot.type === "computed-update" ? snapshot.newValue : typeof snapshot.oldValue !== 'undefined' && typeof snapshot.newValue !== 'undefined' ? `${JSON.stringify(snapshot.oldValue)} -> ${JSON.stringify(snapshot.newValue)}` : JSON.stringify(snapshot.newValue || snapshot.value || '')}</div>
                 <button style="display: none" onclick="window.__MODEL_DEVTOOLS__.timeTravel(${this.history.length - 1 - index})">Apply this state</button>
             </div>
         `).join('');
@@ -126,7 +116,6 @@ class ModelDevTools {
         document.body.appendChild(dialog);
     }
 
-    
     /**
      * Creates a toggle button for the Model DevTools panel.
      * The button is appended to the page and provides
@@ -141,7 +130,6 @@ class ModelDevTools {
         document.body.appendChild(button);
     }
 
-    
     /**
      * Sets up listeners for the model and its store to track and log changes,
      * events, computed property updates, and array operations. This enables
@@ -152,49 +140,31 @@ class ModelDevTools {
 
         this.model.store.on('change', (data) => {
             this.logChange({
-                type: 'data-change',
-                path: data.path,
-                oldValue: data.oldValue,
-                newValue: data.newValue,
-                timestamp: Date.now()
+                type: 'data-change', path: data.path, oldValue: data.oldValue, newValue: data.newValue, timestamp: Date.now()
             });
         });
-
 
         this.model.store.on('*', (eventName, data) => {
             if (eventName !== 'change' && eventName !== 'compute' && eventName !== 'arrayChange') {
                 this.logChange({
-                    type: 'store-event',
-                    event: eventName,
-                    data,
-                    timestamp: Date.now()
+                    type: 'store-event', event: eventName, data, timestamp: Date.now()
                 });
             }
         });
-
 
         this.model.on('*', (eventName, data) => {
             if (eventName !== 'change' && eventName !== 'compute') {
                 this.logChange({
-                    type: 'model-event',
-                    event: eventName,
-                    data,
-                    timestamp: Date.now()
+                    type: 'model-event', event: eventName, data, timestamp: Date.now()
                 });
             }
         });
 
-
         this.model.store.on('compute', (data) => {
             this.logChange({
-                type: 'computed-update',
-                property: data.key,
-                dependencies: Array.from(data.dependencies),
-                newValue: data.value,
-                timestamp: Date.now()
+                type: 'computed-update', property: data.key, dependencies: Array.from(data.dependencies), newValue: data.value, timestamp: Date.now()
             });
         });
-
 
         this.model.store.on('arrayChange', (data) => {
             this.logChange({
@@ -209,7 +179,6 @@ class ModelDevTools {
         });
     }
 
-    
     /**
      * Logs a change entry and updates the Model DevTools display if enabled.
      *
@@ -227,16 +196,13 @@ class ModelDevTools {
     logChange(entry) {
         if (!this.options.enabled) return;
 
-
         if (this.options.timeTravel) {
             this.saveSnapshot(entry);
         }
 
-
         this.updateDisplay();
     }
 
-    
     /**
      * Saves a snapshot of the current model state, including computed properties and relevant metadata.
      *
@@ -253,17 +219,14 @@ class ModelDevTools {
     saveSnapshot(entry) {
 
         const snapshot = {
-            ...entry,
-            state: JSON.parse(JSON.stringify(this.model.data)),
+            ...entry, state: JSON.parse(JSON.stringify(this.model.data)),
 
             computed: this.getComputedValues()
         };
 
-
         this.history = this.history.slice(0, this.currentIndex + 1);
         this.history.push(snapshot);
         this.currentIndex++;
-
 
         if (this.history.length > this.options.maxSnapshots) {
             this.history.shift();
@@ -271,7 +234,6 @@ class ModelDevTools {
         }
     }
 
-    
     /**
      * Updates the display of the Model DevTools.
      *
@@ -310,8 +272,7 @@ class ModelDevTools {
             try {
 
                 const formattedChange = {
-                    ...change,
-                    timestamp: new Date(change.timestamp).toLocaleTimeString()
+                    ...change, timestamp: new Date(change.timestamp).toLocaleTimeString()
                 };
                 changeContent = JSON.stringify(formattedChange, null, 2);
             } catch (e) {
@@ -323,7 +284,6 @@ class ModelDevTools {
                 <pre>${changeContent}</pre>
             </div>\n`;
         }
-
 
         const computedValues = this.getComputedValues();
 
@@ -352,7 +312,6 @@ class ModelDevTools {
         }
     }
 
-    
     /**
      * Formats and returns a structured representation of model's DOM dependencies.
      *
@@ -367,8 +326,7 @@ class ModelDevTools {
             const dependencies = {};
             this.model.dom.domDependencies.forEach((value, key) => {
                 dependencies[key] = Array.from(value).map(dep => ({
-                    type: dep.type,
-                    element: dep.element.tagName
+                    type: dep.type, element: dep.element.tagName
                 }));
             });
             return JSON.stringify(dependencies, null, 2);
@@ -377,7 +335,6 @@ class ModelDevTools {
         }
     }
 
-    
     /**
      * Retrieves computed values from the model and returns them in a structured format.
      *
@@ -395,7 +352,6 @@ class ModelDevTools {
             return this.model.computed.all();
         }
 
-
         if (this.model.computed.keys && Array.isArray(this.model.computed.keys)) {
             const result = {};
             for (const key of this.model.computed.keys) {
@@ -403,7 +359,6 @@ class ModelDevTools {
             }
             return result;
         }
-
 
         const computedValues = {};
         for (const key in this.model.data) {
@@ -415,7 +370,6 @@ class ModelDevTools {
         return computedValues;
     }
 
-    
     /**
      * Retrieves the most recent changes from the history.
      *
@@ -428,7 +382,6 @@ class ModelDevTools {
         return this.history.slice(-5).reverse();
     }
 
-    
     /**
      * Toggles the visibility of the development tools panel.
      *
@@ -442,7 +395,6 @@ class ModelDevTools {
         }
     }
 
-    
     /**
      * Retrieves the data stored at the specified path in the model's store.
      *
@@ -456,7 +408,6 @@ class ModelDevTools {
         return this.model.store.get(path);
     }
 
-    
     /**
      * Toggles the visibility of the development tools panel in the UI.
      *
@@ -481,9 +432,7 @@ class ModelDevTools {
             const origEnabled = this.options.enabled;
             this.options.enabled = false;
 
-
             this.model.store.setState(snapshot.state);
-
 
             if (this.model.computed) {
 
@@ -501,7 +450,6 @@ class ModelDevTools {
                 }
             }
 
-
             this.model.dom.updateAllDOM();
 
             this.currentIndex = index;
@@ -510,7 +458,6 @@ class ModelDevTools {
             console.error('Error during time travel:', e);
         }
     }
-    
 
     /**
      * Starts performance monitoring for the model's store.
@@ -529,10 +476,7 @@ class ModelDevTools {
      */
     startPerfMonitoring() {
         this.perfMetrics = {
-            updates: 0,
-            computations: 0,
-            domUpdates: 0,
-            startTime: Date.now()
+            updates: 0, computations: 0, domUpdates: 0, startTime: Date.now()
         };
 
         this.model.store.on('change', () => {
@@ -544,7 +488,6 @@ class ModelDevTools {
         });
     }
 
-    
     getPerfReport() {
         const duration = (Date.now() - this.perfMetrics.startTime) / 1000;
         /**

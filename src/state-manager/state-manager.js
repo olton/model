@@ -15,16 +15,16 @@ export default class StateManager {
         }
     }
 
-    save(){
+    save() {
 
     }
-    
-    load(){
-        
+
+    load() {
+
     }
-    
-    snapshot(){
-        
+
+    snapshot() {
+
     }
 
     // Збереження стану

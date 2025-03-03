@@ -17,7 +17,7 @@ export default class Logger {
         DEBUG: 4,
         TRACE: 5
     };
-    
+
     /**
      * The current debug level for the Logger class. Determines the types of logs
      * that will be displayed. To adjust the logging behavior, set this property
@@ -105,7 +105,7 @@ export default class Logger {
     static warn(message, data) {
         Logger.log(Logger.DEBUG_LEVELS.WARN, message, data);
     }
-    
+
     /**
      * Logs an informational message with an optional data object.
      * This method uses the `Logger.DEBUG_LEVELS.INFO` level.
@@ -127,7 +127,7 @@ export default class Logger {
     static debug(message, data) {
         Logger.log(Logger.DEBUG_LEVELS.DEBUG, message, data);
     }
-    
+
     /**
      * Logs a trace message with an optional data object.
      * This method uses the `Logger.DEBUG_LEVELS.TRACE` level.

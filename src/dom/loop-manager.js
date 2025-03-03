@@ -75,7 +75,6 @@ export default class LoopManager {
                 parentNode: element.parentNode
             });
 
-            
             this.domManager.registerDomDependency(arrayPath, element, {
                 type: 'loop',
                 arrayPath
@@ -84,7 +83,6 @@ export default class LoopManager {
             this.updateLoop(element);
         });
 
-        
         const inLoops = rootElement.querySelectorAll('[data-in]');
         inLoops.forEach(element => {
             const attributeValue = element.getAttribute('data-in');
@@ -105,13 +103,13 @@ export default class LoopManager {
             parent.insertBefore(placeholder, element);
 
             this.loopsIn.push({
-                type: 'in', 
+                type: 'in',
                 originalElement: element,
                 template,
                 placeholder,
                 objectPath,
                 keyVar,
-                elements: [] 
+                elements: []
             });
 
             const objectData = this.model.store.get(objectPath);
@@ -120,7 +118,7 @@ export default class LoopManager {
             }
         });
     }
-    
+
     /**
      * Updates the content of object-based loops (`data-in`) when the associated object data changes.
      *
@@ -136,12 +134,10 @@ export default class LoopManager {
         loop.elements.forEach(el => el.remove());
         loop.elements = [];
 
-        
         if (!objectData || typeof objectData !== 'object' || Array.isArray(objectData)) {
             return;
         }
 
-        
         Object.keys(objectData).forEach(key => {
             const newElement = loop.originalElement.cloneNode(true);
             newElement.removeAttribute('data-in');
@@ -150,7 +146,7 @@ export default class LoopManager {
             const itemContext = {
                 [loop.keyVar]: key,
             };
-            
+
             newElement.innerHTML = this.processTemplate(loop.template, objectData, key, itemContext);
 
             loop.placeholder.parentNode.insertBefore(newElement, loop.placeholder.nextSibling);
@@ -161,7 +157,6 @@ export default class LoopManager {
         });
     }
 
-    
     /**
      * Processes a template string by replacing placeholders with computed values
      * based on the given object data, key, and context.
@@ -204,7 +199,7 @@ export default class LoopManager {
             return '';
         });
     }
-    
+
     /**
      * Updates all the loops (`data-for` and `data-in`) when the data in the store changes.
      *
@@ -216,14 +211,13 @@ export default class LoopManager {
      * @param {*} value - The new value at the given path.
      */
     updateLoops(path, value) {
-        
+
         this.loops.forEach((loopInfo, element) => {
             if (loopInfo.arrayPath === path) {
                 this.updateLoop(element);
             }
         });
 
-        
         this.loopsIn.forEach(loop => {
             if (loop.type === 'in' && (loop.objectPath === path || path.startsWith(loop.objectPath + '.'))) {
                 const objectData = this.model.store.get(loop.objectPath);
@@ -234,7 +228,6 @@ export default class LoopManager {
         });
     }
 
-    
     /**
      * Updates the loops and maintains synchronization of the DOM elements
      * based on changes in the store data. Handles both 'data-for' (array-based)
@@ -248,7 +241,7 @@ export default class LoopManager {
      */
     updateLoop(element) {
         const loopInfo = this.loops.get(element) || this.loopsIn.find(loop => loop.originalElement === element)[0];
-        
+
         if (!loopInfo) {
             console.error('Информация о цикле не найдена для элемента');
             return;
@@ -283,7 +276,6 @@ export default class LoopManager {
         element.style.display = 'none';
     }
 
-    
     /**
      * Partially updates a single DOM element within a loop based on changes in
      * the associated array. Specifically:
@@ -335,7 +327,7 @@ export default class LoopManager {
             });
         }
     }
-    
+
     /**
      * Returns an object containing the tracked loops in the current instance.
      *
@@ -349,7 +341,7 @@ export default class LoopManager {
             "in": this.loopsIn
         }
     }
-    
+
     /**
      * Destroys all tracked loops by clearing the internal Map of `data-for` loops.
      *

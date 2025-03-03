@@ -66,7 +66,7 @@ export default class ReactiveStore extends EventEmitter {
      * @returns {Proxy} Reactive proxy
      */
     createReactiveProxy(obj, path = '') {
-        
+
         if (Array.isArray(obj)) {
             return this.createArrayProxy(obj, path);
         }
@@ -80,7 +80,6 @@ export default class ReactiveStore extends EventEmitter {
                 const value = target[prop];
                 const fullPath = path ? `${path}.${prop}` : prop;
 
-                
                 if (value && typeof value === 'object') {
                     return this.createReactiveProxy(value, fullPath);
                 }
@@ -97,22 +96,18 @@ export default class ReactiveStore extends EventEmitter {
                 const fullPath = path ? `${path}.${prop}` : prop;
                 const oldValue = target[prop];
 
-                
                 if (oldValue === value) {
                     return true;
                 }
 
-                
                 if (this.validators?.has(`${fullPath}`)) {
                     const isValid = this.validators.get(`${fullPath}`)(value);
                     if (!isValid) return false;
                 }
 
-                
                 if (this.formatters?.has(`${fullPath}`)) {
                     value = this.formatters.get(`${fullPath}`)(value);
                 }
-                
                 
                 if (value && typeof value === 'object') {
                     value = this.createReactiveProxy(value, fullPath);
@@ -125,23 +120,20 @@ export default class ReactiveStore extends EventEmitter {
                     preventDefault: false
                 };
 
-                
                 await this.middleware.process(context);
 
                 if (context.preventDefault) {
                     return true;
                 }
-                
+
                 target[prop] = value;
 
-                
                 this.emit('change', {
                     path: fullPath,
                     oldValue,
                     newValue: value
                 });
 
-                
                 if (this.watchers.has(fullPath)) {
                     this.watchers.get(fullPath).forEach(callback => {
                         callback(value, oldValue);
@@ -162,13 +154,12 @@ export default class ReactiveStore extends EventEmitter {
                 const result = delete target[prop];
 
                 if (result) {
-                    
+
                     this.emit('delete', {
                         path: fullPath,
                         oldValue
                     });
 
-                    
                     if (this.watchers.has(fullPath)) {
                         this.watchers.get(fullPath).forEach(callback => {
                             callback(undefined, oldValue);
@@ -181,7 +172,6 @@ export default class ReactiveStore extends EventEmitter {
         });
     }
 
-    
     /**
      * Creates a reactive proxy for an array.
      * The proxy intercepts standard array methods (e.g., push, pop, shift, etc.)
@@ -196,42 +186,53 @@ export default class ReactiveStore extends EventEmitter {
     createArrayProxy(array, path) {
         return new Proxy(array, {
             get: (target, prop) => {
+                if (typeof prop === 'symbol') {
+                    return target[prop];
+                }
+
                 const value = target[prop];
 
-                
                 if (typeof value === 'function' &&
                     ['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse'].includes(prop)) {
 
                     return (...args) => {
-                        
-                        const oldArray = [...target];
-
-                        
+                        const oldValue = [...target];
                         const result = target[prop].apply(target, args);
 
-                        
-                        this.emit('arrayChange', {
-                            path,
+                        const context = {
+                            prop: path,
+                            oldValue,
+                            newValue: target,
                             method: prop,
                             args,
-                            oldValue: oldArray,
-                            newValue: [...target]
-                        });
+                            preventDefault: false
+                        };
 
-                        
-                        if (this.watchers.has(path)) {
-                            this.watchers.get(path).forEach(callback => {
-                                callback([...target], oldArray);
-                            });
-                        }
+                        this.middleware.process(context).then(() => {
+                            if (!context.preventDefault) {
+                                // Емітимо подію про зміну
+                                this.emit('change', {
+                                    path,
+                                    oldValue,
+                                    newValue: target,
+                                    method: prop,
+                                    args
+                                });
+
+                                // Викликаємо відповідні watchers
+                                if (this.watchers.has(path)) {
+                                    this.watchers.get(path).forEach(callback => {
+                                        callback(target, oldValue);
+                                    });
+                                }
+                            }
+                        });
 
                         return result;
                     };
                 }
 
-                
                 if (typeof prop !== 'symbol' && !isNaN(Number(prop))) {
-                    
                     if (value && typeof value === 'object') {
                         return this.createReactiveProxy(value, `${path}[${prop}]`);
                     }
@@ -246,25 +247,24 @@ export default class ReactiveStore extends EventEmitter {
                     return true;
                 }
 
+                const fullPath = path ? `${path}.${prop}` : prop;
                 const oldValue = target[prop];
 
-                
                 if (oldValue === value) {
                     return true;
                 }
 
-                
-                if (this.validators?.has(`${path}.${prop}`)) {
-                    const isValid = this.validators.get(`${path}.${prop}`)(value);
+                if (this.validators?.has(fullPath)) {
+                    const isValid = this.validators.get(fullPath)(value);
                     if (!isValid) return false;
                 }
 
-                
-                if (this.formatters?.has(`${path}.${prop}`)) {
-                    value = this.formatters.get(`${path}.${prop}`)(value);
+                if (this.formatters?.has(fullPath)) {
+                    value = this.formatters.get(fullPath)(value);
                 }
 
-                
+                target[prop] = value;
+
                 if (value && typeof value === 'object') {
                     value = this.createReactiveProxy(value, `${path}[${prop}]`);
                 }
@@ -276,7 +276,6 @@ export default class ReactiveStore extends EventEmitter {
                     preventDefault: false
                 };
 
-                
                 await this.middleware.process(context);
 
                 if (context.preventDefault) {
@@ -285,26 +284,28 @@ export default class ReactiveStore extends EventEmitter {
 
                 target[prop] = value;
 
-                
-                this.emit('change', {
-                    path: `${path}[${prop}]`,
-                    oldValue,
-                    newValue: value,
-                    arrayIndex: Number(prop)
-                });
+                this.middleware.process(context).then(() => {
+                    if (!context.preventDefault) {
+                        this.emit('change', {
+                            path: fullPath,
+                            oldValue,
+                            newValue: value,
+                            arrayIndex: Number(prop)
+                        });
 
-                
-                if (this.watchers.has(path)) {
-                    this.watchers.get(path).forEach(callback => {
-                        callback([...target], undefined);
-                    });
-                }
+                        if (this.watchers.has(fullPath)) {
+                            this.watchers.get(fullPath).forEach(callback => {
+                                callback(value, oldValue);
+                            });
+                        }
+                    }
+                });
 
                 return true;
             }
         });
     }
-    
+
     /**
      * Applies the specified array method (e.g., push, pop, splice) on the array
      * located at the given path in the state tree. The function ensures
@@ -324,13 +325,10 @@ export default class ReactiveStore extends EventEmitter {
             return false;
         }
 
-        
         const oldArray = [...array];
 
-        
         const result = array[method].apply(array, args);
 
-        
         this.emit('arrayChange', {
             path,
             method,
@@ -338,15 +336,13 @@ export default class ReactiveStore extends EventEmitter {
             oldValue: oldArray,
             newValue: [...array]
         });
-        
-        
+
         this.emit('change', {
             path,
             oldValue: oldArray,
             newValue: [...array]
         });
 
-        
         if (this.watchers.has(path)) {
             this.watchers.get(path).forEach(callback => {
                 callback([...array], oldArray);
@@ -375,18 +371,15 @@ export default class ReactiveStore extends EventEmitter {
             return false;
         }
 
-        
         const oldArray = [...array];
         const result = callback(array);
 
-        
         this.emit('change', {
             path,
             oldValue: oldArray,
             newValue: [...array]
         });
 
-        
         if (this.watchers.has(path)) {
             this.watchers.get(path).forEach(callback => {
                 callback([...array], oldArray);
@@ -395,7 +388,7 @@ export default class ReactiveStore extends EventEmitter {
 
         return result
     }
-    
+
     /**
      * Detects changes between two arrays, identifying items that were added, removed,
      * or moved. This function compares items by their JSON stringified values.
@@ -419,9 +412,9 @@ export default class ReactiveStore extends EventEmitter {
             );
 
             if (oldIndex === -1) {
-                changes.added.push({ index: i, item });
+                changes.added.push({index: i, item});
             } else if (oldIndex !== i) {
-                changes.moved.push({ oldIndex, newIndex: i, item });
+                changes.moved.push({oldIndex, newIndex: i, item});
             }
         }
 
@@ -432,13 +425,13 @@ export default class ReactiveStore extends EventEmitter {
             );
 
             if (newIndex === -1) {
-                changes.removed.push({ index: i, item });
+                changes.removed.push({index: i, item});
             }
         }
 
         return changes;
     }
-    
+
     /**
      * Watches for changes to the specified path in the state tree
      * and allows the addition of callbacks that execute when changes occur.
@@ -455,7 +448,6 @@ export default class ReactiveStore extends EventEmitter {
         }
         this.watchers.get(path).add(callback);
 
-        
         return () => {
             if (this.watchers.has(path)) {
                 this.watchers.get(path).delete(callback);
@@ -463,7 +455,6 @@ export default class ReactiveStore extends EventEmitter {
         };
     }
 
-    
     /**
      * Retrieves the value at the specified path in the state tree.
      * @param {string} [path] - The dot-delimited path to the desired value within the state tree.
@@ -484,7 +475,7 @@ export default class ReactiveStore extends EventEmitter {
 
         return value;
     }
-    
+
     /**
      * Sets a new value at the specified path in the state tree.
      * @param {String} path - The dot-delimited path to the desired value within the state tree.
@@ -505,7 +496,6 @@ export default class ReactiveStore extends EventEmitter {
         return value;
     }
 
-    
     /**
      * Executes the given updater as a batch operation on the state.
      *
@@ -536,7 +526,6 @@ export default class ReactiveStore extends EventEmitter {
         });
     }
 
-    
     /**
      * Retrieves the current state tree.
      * @returns {Object} The entire state object.
@@ -545,7 +534,6 @@ export default class ReactiveStore extends EventEmitter {
         return this.state;
     }
 
-    
     /**
      * Retrieves the previous state of the state tree.
      *
@@ -558,7 +546,6 @@ export default class ReactiveStore extends EventEmitter {
         return this.previousState;
     }
 
-    
     /**
      * Converts the current state tree to a JSON string.
      *
@@ -571,7 +558,6 @@ export default class ReactiveStore extends EventEmitter {
         return JSON.stringify(this.state);
     }
 
-    
     /**
      * Reconstructs the state tree from a JSON string.
      *
@@ -600,7 +586,6 @@ export default class ReactiveStore extends EventEmitter {
         });
     }
 
-    
     /**
      * Adds a validator function for a specific property in the state tree.
      *
@@ -617,7 +602,6 @@ export default class ReactiveStore extends EventEmitter {
         this.validators.set(propertyPath, validator);
     }
 
-    
     /**
      * Adds a formatter function for a specific property in the state tree.
      *
@@ -636,7 +620,6 @@ export default class ReactiveStore extends EventEmitter {
         this.formatters.set(propertyPath, formatter);
     }
 
-    
     /**
      * Validates if the provided path exists in the state tree.
      *
@@ -654,7 +637,7 @@ export default class ReactiveStore extends EventEmitter {
             return false;
         }
     }
-    
+
     /**
      * Destroys the current state object and clears all associated watchers and previous states.
      *

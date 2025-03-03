@@ -13,7 +13,6 @@ export const extractVariables = (expression) => {
     return [...new Set(matches)];
 }
 
-
 /**
  * Evaluates a JavaScript expression within the provided context.
  *

@@ -29,7 +29,7 @@ export default class ComputedProps {
     init() {
         for (const key in this.computed) {
             this.evaluate(key);
-            
+
             Object.defineProperty(this.model.data, key, {
                 get: () => this.computed[key].value,
                 enumerable: true,
@@ -61,9 +61,7 @@ export default class ComputedProps {
 
                 dependencies.add(prop);
 
-
                 let value = target[prop];
-
 
                 if (value && typeof value === 'object') {
                     return new Proxy(value, {
@@ -107,14 +105,11 @@ export default class ComputedProps {
         for (const key in this.computed) {
             const computed = this.computed[key];
 
-
             const isDependency = computed.dependencies.some(dep => {
 
                 if (dep === changedProp) return true;
 
-
                 if (changedProp.startsWith(dep + '.')) return true;
-
 
                 if (dep.startsWith(changedProp + '.')) return true;
 
@@ -124,13 +119,12 @@ export default class ComputedProps {
             if (isDependency) {
                 const newValue = this.evaluate(key);
 
-
                 this.model.dom.updateDOM(key, newValue);
                 this.model.dom.updateInputs(key, newValue);
             }
         }
     }
-    
+
     /**
      * @method all
      * @description Retrieves all computed properties and their current values.

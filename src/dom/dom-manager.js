@@ -9,7 +9,6 @@ import AttributeManager from "./attribute-manager.js";
  */
 export default class DOMManager {
 
-    
     /**
      * Creates an instance of the DOMManager class, initializing necessary properties and dependencies
      * for managing the DOM in relation to the model. Sets up managers for loops, conditionals, and attributes,
@@ -24,12 +23,11 @@ export default class DOMManager {
         this.inputs = [];
         this.domDependencies = new Map();
         this.virtualDom = new Map();
-        
+
         this.loopManager = new LoopManager(this, model);
         this.conditionalManager = new ConditionalManager(this, model);
         this.attributeManager = new AttributeManager(this, model);
     }
-
 
     /**
      * Registers a dependency between a model property path and a DOM element.
@@ -72,7 +70,7 @@ export default class DOMManager {
                 node.textContent = newText;
             }
         } else if (node.nodeType === Node.ELEMENT_NODE) {
-            
+
             Array.from(node.childNodes).forEach(child => {
                 this.processTemplateNode(child, context);
             });
@@ -104,19 +102,16 @@ export default class DOMManager {
             const text = node.textContent;
             const originalText = text;
 
-            
             regex.lastIndex = 0;
 
             while ((match = regex.exec(text)) !== null) {
                 const propPath = match[1].trim();
 
-                
                 this.registerDomDependency(propPath, node, {
                     type: 'template',
                     template: originalText
                 });
 
-                
                 this.elements.push({
                     node,
                     propName: propPath,
@@ -124,16 +119,13 @@ export default class DOMManager {
                 });
             }
 
-            
             this.virtualDom.set(node, node.textContent);
         }
 
-        
         const inputs = root.querySelectorAll('[data-model]');
         inputs.forEach(input => {
             const property = input.getAttribute('data-model');
 
-            
             const handler = (e) => {
                 const value = input.type === 'checkbox' || input.type === 'radio'
                     ? e.target.checked
@@ -142,7 +134,6 @@ export default class DOMManager {
                 this.model.store.set(property, value);
             };
 
-            
             input.__modelInputHandler = handler;
 
             input.addEventListener('input', handler);
@@ -153,7 +144,7 @@ export default class DOMManager {
             });
         });
     }
-    
+
     /**
      * Sets the value of the input element based on the provided value.
      * For checkboxes and radio buttons, it sets the `checked` property.
@@ -169,7 +160,7 @@ export default class DOMManager {
             input.value = value;
         }
     }
-    
+
     /**
      * Updates all input elements associated with the specified property with the provided value.
      * It ensures that the value in the DOM accurately reflects the value in the model.
@@ -184,7 +175,7 @@ export default class DOMManager {
             }
         });
     }
-    
+
     /**
      * Updates all DOM elements based on the current state of the model.
      * This includes:
@@ -197,7 +188,7 @@ export default class DOMManager {
      * Ensures that the UI remains synchronized with the underlying model.
      */
     updateAllDOM() {
-        
+
         this.elements.forEach(element => {
             let newContent = element.template;
             newContent = newContent.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
@@ -207,13 +198,12 @@ export default class DOMManager {
             element.node.textContent = newContent;
         });
 
-        
         this.inputs.forEach(item => {
             const value = this.model.store.get(item.property);
             this.setInputValue(item.element, value);
         });
     }
-    
+
     /**
      * Updates the DOM elements or attributes whenever a property in the model changes.
      * It resolves what elements depending on the property should be updated,
@@ -223,18 +213,19 @@ export default class DOMManager {
      * @param {*} value - New value of the property (could be a primitive, object, or array).
      */
     updateDOM(propertyPath, value) {
-        
+        if (!propertyPath) {
+            console.warn('Path is undefined in updateDOM');
+            return;
+        }
+
         const isArrayMethodChange = value && typeof value === 'object' && 'method' in value;
 
         if (isArrayMethodChange) {
-            
             propertyPath = value.path || propertyPath;
         }
 
-        
         const elementsToUpdate = new Set();
 
-        
         if (this.domDependencies.has(propertyPath)) {
             this.domDependencies.get(propertyPath).forEach(dep =>
                 elementsToUpdate.add(dep)
@@ -253,7 +244,7 @@ export default class DOMManager {
             //     }
             // }
         }
-        
+
         const pathParts = propertyPath.split('.');
         let currentPath = '';
         for (let i = 0; i < pathParts.length; i++) {
@@ -264,7 +255,7 @@ export default class DOMManager {
                 );
             }
         }
-        
+
         const conditionalElements = this.conditionalManager.getDependenciesByPath(propertyPath);
         conditionalElements.forEach(dep => {
             if (dep.type === 'if') {
@@ -283,7 +274,7 @@ export default class DOMManager {
         }
 
         if (elementsToUpdate.size === 0) return;
-        
+
         const updates = {
             template: [],
             conditional: [],
@@ -296,13 +287,12 @@ export default class DOMManager {
                 updates[dep.type].push(dep);
             }
         });
-        
+
         updates.template.forEach(dep => this.updateTemplateNode(dep.element, dep.template));
         updates.conditional.forEach(dep => this.conditionalManager.updateConditional(dep.element, dep.expression));
         updates.attribute.forEach(dep => this.attributeManager.updateAttribute(dep.element, dep.attribute, dep.expression));
         updates.loop.forEach(dep => this.loopManager.updateLoopPart(dep.element, dep.arrayPath, value, dep.index));
     }
-    
 
     /**
      * Updates a template-based DOM node's content with the latest values
@@ -323,13 +313,12 @@ export default class DOMManager {
             return this.model.store.get(path);
         });
 
-        
         if (this.virtualDom.get(node) !== newContent) {
             node.textContent = newContent;
             this.virtualDom.set(node, newContent);
         }
     }
-    
+
     /**
      * Parses and processes attribute bindings in the provided root
      * DOM element. Attributes prefixed with a colon (e.g., `:class`)
@@ -346,43 +335,36 @@ export default class DOMManager {
      *                                    for attribute bindings.
      */
     parseAttributeBindings(rootElement) {
-        
+
         const allElements = rootElement.querySelectorAll('*');
 
-        
         for (const element of allElements) {
-            
+
             const attributes = element.attributes;
 
             for (let i = 0; i < attributes.length; i++) {
                 const attr = attributes[i];
 
-                
                 if (attr.name.startsWith(':')) {
-                    
+
                     const realAttrName = attr.name.substring(1);
 
-                    
                     const expression = attr.value;
 
-                    
                     this.updateElementAttribute(element, realAttrName, expression);
 
-                    
                     this.registerDomDependency(expression, element, {
                         type: 'attribute',
                         attribute: realAttrName,
                         expression: expression
                     });
 
-                    
                     element.removeAttribute(attr.name);
                 }
             }
         }
     }
 
-    
     /**
      * Updates the value of a DOM element's attribute based on the current
      * state of the model store.
@@ -403,14 +385,14 @@ export default class DOMManager {
         const value = this.model.store.get(expression);
 
         if (value !== undefined) {
-            
+
             if (attribute === 'class') {
                 element.className = value;
             } else if (attribute === 'disabled' ||
                 attribute === 'checked' ||
                 attribute === 'selected' ||
                 attribute === 'readonly') {
-                
+
                 if (value) {
                     element.setAttribute(attribute, '');
                 } else {
@@ -424,7 +406,6 @@ export default class DOMManager {
         }
     }
 
-    
     /**
      * Checks whether the given pathA is a dependency of pathB.
      *
@@ -443,7 +424,6 @@ export default class DOMManager {
             pathB.startsWith(`${pathA}[`);
     }
 
-    
     /**
      * Retrieves all paths from the DOM dependency tracker that are
      * dependent on the given path. A path is considered dependent if:
@@ -465,7 +445,6 @@ export default class DOMManager {
         return dependentPaths;
     }
 
-
     /**
      * Binds and processes the DOM for data binding, conditional rendering,
      * loops, and attribute updates. This method integrates the different
@@ -481,15 +460,15 @@ export default class DOMManager {
      *
      * @param {HTMLElement} rootElement - The root element to initiate the DOM binding process.
      */
-    bindDOM(rootElement){
+    bindDOM(rootElement) {
         this.loopManager.parseLoops(rootElement);
         this.conditionalManager.parseConditionals(rootElement);
         this.attributeManager.parseAttributes(rootElement);
-        this.parseAttributeBindings(rootElement); 
+        this.parseAttributeBindings(rootElement);
         this.parse(rootElement);
         this.updateAllDOM();
     }
-    
+
     /**
      * Validates the model for potential issues, including:
      *
@@ -516,7 +495,6 @@ export default class DOMManager {
         const errors = [];
         const warnings = [];
 
-        
         for (const key in this.model.computed) {
             const visited = new Set();
             const cyclePath = this.checkCyclicDependencies(key, visited);
@@ -529,7 +507,6 @@ export default class DOMManager {
             }
         }
 
-        
         this.domDependencies.forEach((deps, path) => {
             if (!this.model.store.isValidPath(path)) {
                 warnings.push({
@@ -540,9 +517,9 @@ export default class DOMManager {
             }
         });
 
-        return { errors, warnings };
+        return {errors, warnings};
     }
-    
+
     /**
      * Checks for cyclic dependencies in the computed properties of the model.
      *
@@ -580,7 +557,7 @@ export default class DOMManager {
 
         return null;
     }
-    
+
     /**
      * Destroys the instance by performing cleanup tasks.
      *
@@ -591,18 +568,18 @@ export default class DOMManager {
      * and free resources to avoid memory leaks.
      */
     destroy() {
-        this.inputs.forEach(({ element }) => {
+        this.inputs.forEach(({element}) => {
             if (element.__modelInputHandler) {
                 element.removeEventListener('input', element.__modelInputHandler);
                 delete element.__modelInputHandler;
             }
         });
-        
+
         this.elements = [];
         this.inputs = [];
         this.domDependencies.clear();
         this.virtualDom.clear();
-        
+
         this.loopManager.destroy();
         this.conditionalManager.destroy();
     }

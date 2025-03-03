@@ -10,8 +10,7 @@ import ComputedProps from "../reactive/computed.js";
  * @type {{id: string, memoizeComputed: boolean}}
  */
 const ModelOptions = {
-    id: "model",
-    memoizeComputed: true,
+    id: "model", memoizeComputed: true,
 }
 
 /**
@@ -49,9 +48,7 @@ class Model extends EventEmitter {
         for (const key in data) {
             if (typeof data[key] === 'function') {
                 this.computed[key] = {
-                    getter: data[key],
-                    value: null,
-                    dependencies: []
+                    getter: data[key], value: null, dependencies: []
                 };
                 delete data[key];
             }
@@ -138,9 +135,7 @@ class Model extends EventEmitter {
      * @returns {Model|undefined} - Returns the model instance, or undefined if the root element is not found.
      */
     init(selector) {
-        const rootElement = typeof selector === 'string'
-            ? document.querySelector(selector)
-            : selector;
+        const rootElement = typeof selector === 'string' ? document.querySelector(selector) : selector;
 
         if (!rootElement) {
             Logger.error('The root element was not found!');
