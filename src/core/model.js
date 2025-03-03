@@ -35,8 +35,8 @@ class Model extends EventEmitter {
         this.computedProps = new ComputedProps(this, this.computed);
         this.subscribe();
         this.computedProps.init();
-    }    
-    
+    }
+
     subscribe() {
         this.store.on("change", (data) => {
             this.dom.updateDOM(data.path, data.newValue);
