@@ -125,7 +125,6 @@ export default class LoopManager {
     }
 
     processTemplate(template, objectData, key, itemContext) {
-        console.log(objectData)
         return template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
             path = path.trim();
             const keyVar = Object.keys(itemContext)[0];

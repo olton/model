@@ -166,16 +166,19 @@ export default class DOMManager {
             this.domDependencies.get(propertyPath).forEach(dep =>
                 elementsToUpdate.add(dep)
             );
-            const deps = this.domDependencies.get(propertyPath);
-            for (const { element, meta } of deps) {
-                // Обрабатываем разные типы зависимостей
-                switch (meta.type) {
-                    case 'attribute':
-                        // Обработка атрибутов
-                        this.updateElementAttribute(element, meta.attribute, meta.expression);
-                        break;
-                }
-            }
+            // const deps = this.domDependencies.get(propertyPath);
+            // for (const { element, meta } of deps) {
+            //     console.log(element, meta);
+            //     // Обрабатываем разные типы зависимостей
+            //     if (meta && meta.type) { 
+            //         switch (meta.type) {
+            //             case 'attribute':
+            //                 // Обработка атрибутов
+            //                 // this.updateElementAttribute(element, meta.attribute, meta.expression);
+            //                 break;
+            //         }
+            //     }
+            // }
         }
 
         // Добавляем элементы, зависящие от родительского пути
@@ -334,8 +337,7 @@ export default class DOMManager {
         this.loopManager.parseLoops(rootElement);
         this.conditionalManager.parseConditionals(rootElement);
         this.attributeManager.parseAttributes(rootElement);
-        // Обработка атрибутов (:attribute)
-        this.parseAttributeBindings(rootElement);
+        this.parseAttributeBindings(rootElement); // Обработка атрибутов (:attribute)
         this.parse(rootElement);
         this.updateAllDOM();
     }

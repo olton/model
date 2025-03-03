@@ -39,6 +39,10 @@ globalThis.addItem = () => {
     // app.store.applyArrayChanges('items', items => items.push(`Item ${app.data.items.length + 1}`));
 }
 
+globalThis.enableButton = () => {
+    app.data.is_disabled = false;
+}
+
 app.initDevTools({
     enabled: true,
     timeTravel: true,
