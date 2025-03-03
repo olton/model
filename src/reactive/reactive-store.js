@@ -1,7 +1,32 @@
 import EventEmitter from '../event-emitter/event-emitter.js';
 import MiddlewareManager from "../middleware/middleware.js";
 
+/**
+ * Reactive state management store with:
+ * - Deep reactivity through Proxy
+ * - Middleware support for state changes
+ * - Validation and formatting capabilities
+ * - State change history tracking
+ * - Event-driven updates via EventEmitter
+ * - Support for arrays and nested objects
+ *
+ * @extends EventEmitter
+ */
 export default class ReactiveStore extends EventEmitter {
+
+    /**
+     * Initializes a new ReactiveStore.
+     * - Creates reactive proxy for state management
+     * - Sets up watchers for property observation
+     * - Stores previous state for change detection
+     * - Initializes middleware system for state updates
+     *
+     * @param {Object} [initialState={}] - Initial store state
+     * @property {Proxy} state - Reactive state object
+     * @property {Map} watchers - Property change observers
+     * @property {Object} previousState - Last known state
+     * @property {MiddlewareManager} middleware - State update pipeline
+     */
     constructor(initialState = {}) {
         super();
 
@@ -11,12 +36,37 @@ export default class ReactiveStore extends EventEmitter {
         this.middleware = new MiddlewareManager();
     }
 
+    /**
+     * Registers state change middleware.
+     * Middleware receives context object with:
+     * - prop: Changed property name
+     * - oldValue: Previous value
+     * - newValue: New value
+     * - preventDefault: Control flag
+     *
+     * @param {Function} middleware - Handler(context, next)
+     */
     use(middleware) {
         this.middleware.use(middleware);
     }
-    
+
+    /**
+     * Creates reactive proxy for state objects.
+     * Features:
+     * - Special handling for arrays via separate proxy
+     * - Deep reactivity for nested objects
+     * - Property path tracking
+     * - Value validation support
+     * - Value formatting support
+     * - Middleware integration
+     * - Change prevention capability
+     *
+     * @param {Object|Array} obj - Target object
+     * @param {string} [path=''] - Property path
+     * @returns {Proxy} Reactive proxy
+     */
     createReactiveProxy(obj, path = '') {
-        // Якщо це масив, обробляємо спеціально
+        
         if (Array.isArray(obj)) {
             return this.createArrayProxy(obj, path);
         }
@@ -30,7 +80,7 @@ export default class ReactiveStore extends EventEmitter {
                 const value = target[prop];
                 const fullPath = path ? `${path}.${prop}` : prop;
 
-                // Якщо значення є об'єктом, робимо його теж реактивним
+                
                 if (value && typeof value === 'object') {
                     return this.createReactiveProxy(value, fullPath);
                 }
@@ -47,23 +97,23 @@ export default class ReactiveStore extends EventEmitter {
                 const fullPath = path ? `${path}.${prop}` : prop;
                 const oldValue = target[prop];
 
-                // Якщо значення не змінилося, нічого не робимо
+                
                 if (oldValue === value) {
                     return true;
                 }
 
-                // Валідація
+                
                 if (this.validators?.has(`${fullPath}`)) {
                     const isValid = this.validators.get(`${fullPath}`)(value);
                     if (!isValid) return false;
                 }
 
-                // Форматування
+                
                 if (this.formatters?.has(`${fullPath}`)) {
                     value = this.formatters.get(`${fullPath}`)(value);
                 }
                 
-                // Якщо нове значення є об'єктом, робимо його реактивним
+                
                 if (value && typeof value === 'object') {
                     value = this.createReactiveProxy(value, fullPath);
                 }
@@ -75,7 +125,7 @@ export default class ReactiveStore extends EventEmitter {
                     preventDefault: false
                 };
 
-                // Обробляємо через middleware
+                
                 await this.middleware.process(context);
 
                 if (context.preventDefault) {
@@ -84,14 +134,14 @@ export default class ReactiveStore extends EventEmitter {
                 
                 target[prop] = value;
 
-                // Повідомляємо про зміну
+                
                 this.emit('change', {
                     path: fullPath,
                     oldValue,
                     newValue: value
                 });
 
-                // Викликаємо спостерігачів для цього шляху
+                
                 if (this.watchers.has(fullPath)) {
                     this.watchers.get(fullPath).forEach(callback => {
                         callback(value, oldValue);
@@ -112,13 +162,13 @@ export default class ReactiveStore extends EventEmitter {
                 const result = delete target[prop];
 
                 if (result) {
-                    // Повідомляємо про видалення
+                    
                     this.emit('delete', {
                         path: fullPath,
                         oldValue
                     });
 
-                    // Викликаємо спостерігачів
+                    
                     if (this.watchers.has(fullPath)) {
                         this.watchers.get(fullPath).forEach(callback => {
                             callback(undefined, oldValue);
@@ -131,24 +181,35 @@ export default class ReactiveStore extends EventEmitter {
         });
     }
 
-    // Спеціальний проксі для масивів
+    
+    /**
+     * Creates a reactive proxy for an array.
+     * The proxy intercepts standard array methods (e.g., push, pop, shift, etc.)
+     * to enable detection and reaction to structural changes in the array.
+     * It also ensures that array elements are made reactive.
+     *
+     * @param {Array} array - The array to be proxied.
+     * @param {string} path - The path to the current property in the state tree.
+     *
+     * @returns {Proxy} A proxy that wraps the given array to make it reactive.
+     */
     createArrayProxy(array, path) {
         return new Proxy(array, {
             get: (target, prop) => {
                 const value = target[prop];
 
-                // Перехоплюємо методи, що змінюють масив
+                
                 if (typeof value === 'function' &&
                     ['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse'].includes(prop)) {
 
                     return (...args) => {
-                        // Зберігаємо стару копію масиву
+                        
                         const oldArray = [...target];
 
-                        // Викликаємо метод і отримуємо результат
+                        
                         const result = target[prop].apply(target, args);
 
-                        // Повідомляємо про зміну
+                        
                         this.emit('arrayChange', {
                             path,
                             method: prop,
@@ -157,7 +218,7 @@ export default class ReactiveStore extends EventEmitter {
                             newValue: [...target]
                         });
 
-                        // Викликаємо спостерігачів для масиву
+                        
                         if (this.watchers.has(path)) {
                             this.watchers.get(path).forEach(callback => {
                                 callback([...target], oldArray);
@@ -168,9 +229,9 @@ export default class ReactiveStore extends EventEmitter {
                     };
                 }
 
-                // Якщо це звичайне читання властивості
+                
                 if (typeof prop !== 'symbol' && !isNaN(Number(prop))) {
-                    // Якщо значення є об'єктом, робимо його реактивним
+                    
                     if (value && typeof value === 'object') {
                         return this.createReactiveProxy(value, `${path}[${prop}]`);
                     }
@@ -187,23 +248,23 @@ export default class ReactiveStore extends EventEmitter {
 
                 const oldValue = target[prop];
 
-                // Якщо значення не змінилося, нічого не робимо
+                
                 if (oldValue === value) {
                     return true;
                 }
 
-                // Валідація
+                
                 if (this.validators?.has(`${path}.${prop}`)) {
                     const isValid = this.validators.get(`${path}.${prop}`)(value);
                     if (!isValid) return false;
                 }
 
-                // Форматування
+                
                 if (this.formatters?.has(`${path}.${prop}`)) {
                     value = this.formatters.get(`${path}.${prop}`)(value);
                 }
 
-                // Якщо нове значення є об'єктом, робимо його реактивним
+                
                 if (value && typeof value === 'object') {
                     value = this.createReactiveProxy(value, `${path}[${prop}]`);
                 }
@@ -215,7 +276,7 @@ export default class ReactiveStore extends EventEmitter {
                     preventDefault: false
                 };
 
-                // Обробляємо через middleware
+                
                 await this.middleware.process(context);
 
                 if (context.preventDefault) {
@@ -224,7 +285,7 @@ export default class ReactiveStore extends EventEmitter {
 
                 target[prop] = value;
 
-                // Повідомляємо про зміну елемента масиву
+                
                 this.emit('change', {
                     path: `${path}[${prop}]`,
                     oldValue,
@@ -232,7 +293,7 @@ export default class ReactiveStore extends EventEmitter {
                     arrayIndex: Number(prop)
                 });
 
-                // Повідомляємо про зміну всього масиву
+                
                 if (this.watchers.has(path)) {
                     this.watchers.get(path).forEach(callback => {
                         callback([...target], undefined);
@@ -243,8 +304,18 @@ export default class ReactiveStore extends EventEmitter {
             }
         });
     }
-
-    // Спеціалізований метод для масивів
+    
+    /**
+     * Applies the specified array method (e.g., push, pop, splice) on the array
+     * located at the given path in the state tree. The function ensures
+     * that the changes are reactive by emitting appropriate events and invoking watchers.
+     *
+     * @param {string} path - The path to the array in the state tree.
+     * @param {string} method - The name of the array method to apply (e.g., 'push', 'pop').
+     * @param {...any} args - Arguments to pass to the array method.
+     *
+     * @returns {any} The result of applying the array method to the array.
+     */
     applyArrayMethod(path, method, ...args) {
         const array = this.get(path);
 
@@ -253,13 +324,13 @@ export default class ReactiveStore extends EventEmitter {
             return false;
         }
 
-        // Сохраняем старое состояние массива
+        
         const oldArray = [...array];
 
-        // Применяем метод
+        
         const result = array[method].apply(array, args);
 
-        // Генерируем событие изменения массива
+        
         this.emit('arrayChange', {
             path,
             method,
@@ -268,14 +339,14 @@ export default class ReactiveStore extends EventEmitter {
             newValue: [...array]
         });
         
-        // Генерируем событие изменения массива
+        
         this.emit('change', {
             path,
             oldValue: oldArray,
             newValue: [...array]
         });
 
-        // Вызываем наблюдателей для массива
+        
         if (this.watchers.has(path)) {
             this.watchers.get(path).forEach(callback => {
                 callback([...array], oldArray);
@@ -285,9 +356,17 @@ export default class ReactiveStore extends EventEmitter {
         return result;
     }
 
-    // Специализированные методы для массивов
-    // Пример использования:
-    // model.applyArrayChanges('users', (users) => users.push({ name: 'Новый пользователь' }));
+    /**
+     * Watches for changes to an array located at the specified path in the state tree
+     * and applies the provided callback to make modifications.
+     * Emitted events ensure that watchers are notified and reactivity is maintained.
+     *
+     * @param {string} path - The path to the array in the state tree.
+     * @param {Function} callback - A function to modify the array.
+     *                               Receives the array as an argument and applies changes to it.
+     *
+     * @returns {any} The result of the callback function applied to the array.
+     */
     applyArrayChanges(path, callback) {
         const array = this.get(path);
 
@@ -296,18 +375,18 @@ export default class ReactiveStore extends EventEmitter {
             return false;
         }
 
-        // Сохраняем старое состояние массива
+        
         const oldArray = [...array];
         const result = callback(array);
 
-        // Генерируем событие изменения массива
+        
         this.emit('change', {
             path,
             oldValue: oldArray,
             newValue: [...array]
         });
 
-        // Вызываем наблюдателей для массива
+        
         if (this.watchers.has(path)) {
             this.watchers.get(path).forEach(callback => {
                 callback([...array], oldArray);
@@ -316,8 +395,16 @@ export default class ReactiveStore extends EventEmitter {
 
         return result
     }
-
-    // Detect changes in the array
+    
+    /**
+     * Detects changes between two arrays, identifying items that were added, removed,
+     * or moved. This function compares items by their JSON stringified values.
+     *
+     * @param {Array} newArray - The new array to compare.
+     * @param {Array} [oldArray=[]] - The old array to compare against. Defaults to an empty array.
+     *
+     * @returns {Object} An object containing the changes between the arrays.
+     */
     detectArrayChanges(newArray, oldArray = []) {
         const changes = {
             added: [],
@@ -351,15 +438,24 @@ export default class ReactiveStore extends EventEmitter {
 
         return changes;
     }
-
-    // Метод для спостереження за змінами
+    
+    /**
+     * Watches for changes to the specified path in the state tree
+     * and allows the addition of callbacks that execute when changes occur.
+     *
+     * @param {string} path - The path in the state tree to watch for changes.
+     * @param {Function} callback - A function to execute when the value at the path changes.
+     *                                The callback receives the new and old values as parameters.
+     *
+     * @returns {Function} A function to unsubscribe the callback from the watcher.
+     */
     watch(path, callback) {
         if (!this.watchers.has(path)) {
             this.watchers.set(path, new Set());
         }
         this.watchers.get(path).add(callback);
 
-        // Повертаємо функцію для відписки
+        
         return () => {
             if (this.watchers.has(path)) {
                 this.watchers.get(path).delete(callback);
@@ -367,7 +463,12 @@ export default class ReactiveStore extends EventEmitter {
         };
     }
 
-    // Метод для отримання значення за шляхом
+    
+    /**
+     * Retrieves the value at the specified path in the state tree.
+     * @param {string} [path] - The dot-delimited path to the desired value within the state tree.
+     * @returns {any} - The value at the specified path or `undefined` if the path does not exist.
+     */
     get(path) {
         if (!path) return this.state;
 
@@ -383,8 +484,12 @@ export default class ReactiveStore extends EventEmitter {
 
         return value;
     }
-
-    // Метод для встановлення значення за шляхом
+    
+    /**
+     * Sets a new value at the specified path in the state tree.
+     * @param {String} path - The dot-delimited path to the desired value within the state tree.
+     * @param {any} value - The new value to set at the specified path.
+     */
     set(path, value) {
         const parts = path.split('.');
         let current = this.state;
@@ -400,7 +505,20 @@ export default class ReactiveStore extends EventEmitter {
         return value;
     }
 
-    // Метод для пакетного оновлення 
+    
+    /**
+     * Executes the given updater as a batch operation on the state.
+     *
+     * If the `updater` is a function, it will be invoked with the state as an argument,
+     * allowing for multiple updates within a single call. If the `updater` is an object,
+     * its key-value pairs will be used to update specific paths in the state.
+     *
+     * After the batch operation completes, an event (`batchUpdate`) is emitted containing
+     * both the previous state (before changes) and the current state (after changes).
+     *
+     * @param {Function|Object} updater - Either a function to modify the state or an object where keys represent
+     *                                    paths (dot-delimited) and values are the new values to set for those paths.
+     */
     batch(updater) {
         this.previousState = JSON.parse(JSON.stringify(this.state));
 
@@ -418,22 +536,52 @@ export default class ReactiveStore extends EventEmitter {
         });
     }
 
-    // Повертає поточний стан
+    
+    /**
+     * Retrieves the current state tree.
+     * @returns {Object} The entire state object.
+     */
     getState() {
         return this.state;
     }
 
-    // Повертає попередній стан
+    
+    /**
+     * Retrieves the previous state of the state tree.
+     *
+     * This method returns the state as it was prior to the last update,
+     * enabling comparison or rollback operations if needed.
+     *
+     * @returns {Object} The previous state object.
+     */
     getPreviousState() {
         return this.previousState;
     }
 
-    // Сериалізує стан до JSON
+    
+    /**
+     * Converts the current state tree to a JSON string.
+     *
+     * This method serializes the entire state tree into a JSON-formatted string,
+     * which can be used for storage, transmission, or debugging purposes.
+     *
+     * @returns {string} A JSON string representation of the current state.
+     */
     toJSON() {
         return JSON.stringify(this.state);
     }
 
-    // Відновлює стан з JSON
+    
+    /**
+     * Reconstructs the state tree from a JSON string.
+     *
+     * This method accepts a JSON-formatted string representing the state,
+     * replaces the current state with the contents of the JSON, and emits a `restore` event
+     * to notify listeners about the restoration operation. The previous state is preserved
+     * for potential comparisons or rollback operations.
+     *
+     * @param {string} json - A JSON-formatted string representing the new state.
+     */
     fromJSON(json) {
         const newState = JSON.parse(json);
         this.previousState = JSON.parse(JSON.stringify(this.state));
@@ -452,7 +600,16 @@ export default class ReactiveStore extends EventEmitter {
         });
     }
 
-    // Додаємо валідацію
+    
+    /**
+     * Adds a validator function for a specific property in the state tree.
+     *
+     * The validator function should accept the new value as a parameter
+     * and return `true` if the value is valid, or `false` if it is invalid.
+     *
+     * @param {string} propertyPath - The dot-delimited path to the property in the state tree to validate.
+     * @param {Function} validator - A function that checks the validity of the property value.
+     */
     addValidator(propertyPath, validator) {
         if (!this.validators) {
             this.validators = new Map();
@@ -460,7 +617,18 @@ export default class ReactiveStore extends EventEmitter {
         this.validators.set(propertyPath, validator);
     }
 
-    // Додаємо форматування
+    
+    /**
+     * Adds a formatter function for a specific property in the state tree.
+     *
+     * The formatter function modifies the value of a property before it is returned.
+     * This can be helpful when the stored value needs to be presented in a specific format.
+     *
+     * @param {string} propertyPath - The dot-delimited path to the property in the state tree to format.
+     * @param {Function} formatter - A function that transforms the value of the property.
+     *                                The function receives the current value as a parameter
+     *                                and returns the formatted value.
+     */
     addFormatter(propertyPath, formatter) {
         if (!this.formatters) {
             this.formatters = new Map();
@@ -468,7 +636,16 @@ export default class ReactiveStore extends EventEmitter {
         this.formatters.set(propertyPath, formatter);
     }
 
-    // Проверка существования пути в модели
+    
+    /**
+     * Validates if the provided path exists in the state tree.
+     *
+     * This method checks whether the specified dot-delimited path
+     * in the state tree resolves to a defined value.
+     *
+     * @param {string} path - The dot-delimited path to validate.
+     * @returns {boolean} - `true` if the path exists and has a defined value, `false` otherwise.
+     */
     isValidPath(path) {
         try {
             const value = this.get(path);
@@ -477,7 +654,13 @@ export default class ReactiveStore extends EventEmitter {
             return false;
         }
     }
-
+    
+    /**
+     * Destroys the current state object and clears all associated watchers and previous states.
+     *
+     * This method is useful for cleanup operations, ensuring no residual state,
+     * watchers, or references are left in memory.
+     */
     destroy() {
         this.state = null;
         this.watchers.clear();

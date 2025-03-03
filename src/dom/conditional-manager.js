@@ -1,4 +1,25 @@
+/**
+ * Manages conditional rendering logic by interpreting custom attributes
+ * (e.g., `data-if`, `data-else-if`, `data-else`) on DOM elements and updating their visibility.
+ * Tracks dependencies between model paths and conditional groups to reactively update DOM when the model changes.
+ *
+ * @class ConditionalManager
+ * @param {Object} dom - The root DOM element or DOM-related utilities.
+ * @param {Object} model - The data model containing `store` or `data` state.
+ * @property {Object} dom - Reference to the DOM or DOM utilities.
+ * @property {Object} model - Data model for determining dynamic conditions.
+ * @property {Map} dependencies - Tracks variable dependencies for conditional expressions.
+ * @property {Array} conditionalGroups - Group of DOM elements with conditional attributes.
+ */
 export default class ConditionalManager {
+    
+    /**
+     * Initializes a new instance of the ConditionalManager class.
+     *
+     * @constructor
+     * @param {Object} dom - The root DOM element or DOM-related utilities.
+     * @param {Object} model - The data model containing state (e.g., `store` or `data`).
+     */
     constructor(dom, model) {
         this.dom = dom;
         this.model = model;
@@ -8,9 +29,19 @@ export default class ConditionalManager {
         this.subscribe();
     }
 
+    /**
+     * Subscribes to the model's store 'change' event to automatically update
+     * affected conditional groups when data changes.
+     * - Listens for store changes
+     * - Identifies affected groups using getGroupsByPath
+     * - Triggers updates for affected conditional groups
+     *
+     * @method subscribe
+     * @private
+     */
     subscribe() {
         this.model.store.on('change', (data) => {
-            // We update all groups of conditional directives, depending on the changed path
+            
             const dependentGroups = this.getGroupsByPath(data.path);
             dependentGroups.forEach(group => {
                 this.updateConditionalGroup(group);
@@ -18,7 +49,16 @@ export default class ConditionalManager {
         });
     }
 
-    // Obtaining groups depending on the specified path
+    /**
+     * Finds all conditional groups that depend on a specific model path.
+     * - Uses Set to avoid duplicate groups
+     * - Checks direct path matches and path prefix matches
+     * - Filters groups based on their expressions
+     *
+     * @param {string} path - The model path to check dependencies against
+     * @returns {Array} Array of unique conditional groups dependent on the path
+     * @private
+     */
     getGroupsByPath(path) {
         const result = new Set();
 
@@ -26,7 +66,7 @@ export default class ConditionalManager {
             const hasDependency = group.some(item => {
                 if (!item.expression) return false;
 
-                // We check whether the expression contains the specified path
+                
                 return item.expression.includes(path) ||
                     path.startsWith(this.extractBasePath(item.expression));
             });
@@ -39,23 +79,51 @@ export default class ConditionalManager {
         return Array.from(result);
     }
 
-    // Extracting the basic path from expression (for example, from "Counter> 0" extract "Counter")
+
+    /**
+     * Extracts the base path from an expression using regex pattern matching.
+     * - Matches valid JavaScript variable names
+     * - Returns the first match or empty string
+     * - Valid names start with letter/underscore followed by alphanumeric/underscore
+     *
+     * @param {string} expression - Expression to analyze
+     * @returns {string} First valid variable name or empty string
+     * @private
+     */
     extractBasePath(expression) {
         const matches = expression.match(/[a-zA-Z_][a-zA-Z0-9_]*/g);
         return matches ? matches[0] : '';
     }
     
+
+    /**
+     * Parses and creates a map of conditional elements (`data-if`, `data-else-if`, and `data-else`)
+     * within the given `rootElement`. Groups related conditional elements and attaches
+     * them to the `conditionalGroups` property for dynamic evaluation.
+     *
+     * This method identifies `data-if`, `data-else-if`, and `data-else` attributes in the DOM and
+     * ensures their relationships are correctly established (e.g., ensuring `data-else` elements have
+     * preceding `data-if` or `data-else-if` elements). It also handles invalid sequences of attributes
+     * and logs warnings for cases where a `data-else` does not follow valid prerequisites.
+     *
+     * After parsing and grouping, conditional groups are evaluated, and their dependencies
+     * are registered for reactive re-evaluation when relevant model paths change.
+     *
+     * @method parseConditionals
+     * @param {Element} rootElement - The root DOM element to scan for conditional attributes.
+     * @public
+     */
     parseConditionals(rootElement) {
-        // We find all elements with conditional directives in the order of their following in Dom
+        
         const nodes = rootElement.querySelectorAll('[data-if],[data-else-if],[data-else]');
 
-        // We group related conditional elements
+        
         let currentGroup = [];
         const groups = [];
 
         nodes.forEach(node => {
             if (node.hasAttribute('data-if')) {
-                // if found new data-if, We begin a new group
+                
                 if (currentGroup.length) {
                     groups.push(currentGroup);
                 }
@@ -65,7 +133,7 @@ export default class ConditionalManager {
                     expression: node.getAttribute('data-if')
                 }];
             } else if (node.hasAttribute('data-else-if')) {
-                // We check that this is a continuation of the current group
+                
                 if (currentGroup.length && this.isAdjacentNode(currentGroup[currentGroup.length-1].element, node)) {
                     currentGroup.push({
                         element: node,
@@ -73,18 +141,18 @@ export default class ConditionalManager {
                         expression: node.getAttribute('data-else-if')
                     });
                 } else {
-                    // If this is not a continuation, we start a new group (we process as if)
+                    
                     if (currentGroup.length) {
                         groups.push(currentGroup);
                     }
                     currentGroup = [{
                         element: node,
-                        type: 'if', // We consider it as a regular if
+                        type: 'if', 
                         expression: node.getAttribute('data-else-if')
                     }];
                 }
             } else if (node.hasAttribute('data-else')) {
-                // We check that this is a continuation of the current group
+                
                 if (currentGroup.length && this.isAdjacentNode(currentGroup[currentGroup.length-1].element, node)) {
                     currentGroup.push({
                         element: node,
@@ -92,32 +160,44 @@ export default class ConditionalManager {
                         expression: null
                     });
 
-                    // else Always completes the group
+                    
                     groups.push(currentGroup);
                     currentGroup = [];
                 } else {
-                    // If this is not a continuation, we ignore (Else should follow the if/else-line)
+                    
                     console.warn('data-else без предшествующего data-if или data-else-if', node);
                 }
             }
         });
 
-        // Add the last group if it is
+        
         if (currentGroup.length) {
             groups.push(currentGroup);
         }
 
-        // We update each group of conventional elements
+        
         this.conditionalGroups = groups;
         groups.forEach(group => this.updateConditionalGroup(group));
 
-        // We set up a dependence card
+        
         this.setupDependencies(nodes);
     }
 
-    // Checks whether the nodes are neighboring Dom
+    
+    /**
+     * Checks if two DOM nodes are adjacent siblings, ignoring whitespace nodes.
+     *
+     * This method iterates over the sibling nodes of `node1` until it encounters
+     * either `node2` (indicating adjacency) or another element node that is not
+     * a whitespace text node (indicating they are not adjacent).
+     *
+     * @param {Node} node1 - The first DOM node.
+     * @param {Node} node2 - The second DOM node to check adjacency with.
+     * @returns {boolean} `true` if `node2` is an adjacent sibling of `node1`, ignoring whitespace; otherwise `false`.
+     * @private
+     */
     isAdjacentNode(node1, node2) {
-        // We check that Node2 is immediately after Node1 or is separated only
+        
         let current = node1.nextSibling;
         while (current) {
             if (current === node2) return true;
@@ -127,13 +207,37 @@ export default class ConditionalManager {
         return false;
     }
 
-    // Checks whether the knot is a sample
+    
+    /**
+     * Determines if a given DOM node is a whitespace text node.
+     *
+     * A whitespace text node is a text node (nodeType === 3)
+     * whose content consists only of whitespace characters (spaces, tabs, newlines).
+     *
+     * @param {Node} node - The DOM node to check.
+     * @returns {boolean} `true` if the node is a whitespace text node; otherwise `false`.
+     * @private
+     */
     isWhitespaceNode(node) {
         return node.nodeType === 3 && node.textContent.trim() === '';
     }
 
+    
+    /**
+     * Evaluates and updates the visibility of elements within a group of conditionals.
+     *
+     * A group represents a logical chain of `data-if`, `data-else-if`, and `data-else` elements.
+     * This method determines the first condition in the group that evaluates to `true`
+     * and sets the corresponding element to be displayed while hiding others.
+     *
+     * @param {Array<Object>} group - An array representing a logical group of conditionals.
+     * Each object in the array contains:
+     *    - {Element} element: The DOM element.
+     *    - {string} type: The type of conditional ('if', 'else-if', 'else').
+     *    - {string|null} expression: The conditional expression, null for 'else'.
+     */
     updateConditionalGroup(group) {
-        // We get a condition from the model in a safe way
+        
         const context = this.model && this.model.store ?
             {...this.model.store.getState()} :
             this.model && this.model.data ? this.model.data : {};
@@ -142,31 +246,47 @@ export default class ConditionalManager {
 
         for (const item of group) {
             if (item.type === 'if' || item.type === 'else-if') {
-                // We calculate the condition only if the previous ones did not work
+                
                 const result = !conditionMet && this.evaluateExpression(item.expression, context);
 
                 if (result) {
-                    // Show this element
+                    
                     item.element.style.display = '';
                     conditionMet = true;
                 } else {
-                    // We hide the element
+                    
                     item.element.style.display = 'none';
                 }
             } else if (item.type === 'else') {
-                // Show ELSE only if none of the previous conditions has worked
+                
                 item.element.style.display = conditionMet ? 'none' : '';
             }
         }
     }
 
+    
+    /**
+     * Updates the visibility of DOM elements based on conditional expressions.
+     *
+     * This method processes groups of elements with `data-if`, `data-else-if`, and `data-else` attributes,
+     * updating their visibility based on the evaluation of corresponding expressions.
+     *
+     * It also sets up dependencies between variables used in the expressions and their corresponding DOM elements,
+     * allowing for dynamic updates when the context or variables change.
+     *
+     * This functionality is used to implement conditional rendering in the DOM.
+     *
+     * @param {Element} element - The DOM element to update.
+     * @param {string} expression - The conditional expression to evaluate.
+     * Nodes are expected to contain attributes like `data-if`, `data-else-if`, or `data-else`.
+     */
     updateConditional(element, expression) {
-        // Update the entire group if the element is included in the group
+        
         const group = this.findGroupForElement(element);
         if (group) {
             this.updateConditionalGroup(group);
         } else {
-            // For single if elements
+            
             const context = this.model && this.model.store ?
                 {...this.model.store.getState()} :
                 this.model && this.model.data ? this.model.data : {};
@@ -175,9 +295,23 @@ export default class ConditionalManager {
             element.style.display = result ? '' : 'none';
         }
     }
-
+    
+    /**
+     * Finds and returns the group of conditional elements that contains the specified element.
+     *
+     * This method searches through the existing groups of conditional elements to determine
+     * the group where the given element belongs. Each group represents a logical chain of
+     * `data-if`, `data-else-if`, and `data-else` elements.
+     *
+     * @param {Element} element - The DOM element to find the group for.
+     * @returns {Array<Object>|null} The group containing the specified element, or `null` if not found.
+     * Each group object comprises:
+     *    - {Element} element: The DOM element.
+     *    - {string} type: The type of conditional ('if', 'else-if', 'else').
+     *    - {string|null} expression: The conditional expression, null for 'else'.
+     */
     findGroupForElement(element) {
-        // We find a group containing this element
+        
         for (const group of this.conditionalGroups || []) {
             if (group.some(item => item.element === element)) {
                 return group;
@@ -185,7 +319,17 @@ export default class ConditionalManager {
         }
         return null;
     }
-
+    
+    /**
+     * Sets up and configures the dependencies for the provided DOM nodes.
+     *
+     * This method scans through the given list of nodes and determines
+     * which variables are referenced in their conditional expressions (`data-if`, `data-else-if`).
+     * It maps these variables to the corresponding DOM elements, building a dependency tree
+     * that allows tracking of changes and their impact on the visibility of elements.
+     *
+     * @param {NodeList|Array<Element>} nodes - The list of DOM elements to process.
+     */
     setupDependencies(nodes) {
         this.dependencies = new Map();
 
@@ -197,7 +341,7 @@ export default class ConditionalManager {
             } else if (element.hasAttribute('data-else-if')) {
                 expression = element.getAttribute('data-else-if');
             } else {
-                return; // data-else It has no expression
+                return; 
             }
 
             const variables = this.extractVariables(expression);
@@ -215,9 +359,20 @@ export default class ConditionalManager {
             });
         });
     }
-
+    
+    /**
+     * Extracts variables from a given expression string.
+     *
+     * This method parses the expression and returns a list of variable names that are used
+     * in the expression. The variables are determined based on alphanumeric and underscore
+     * naming conventions, excluding JavaScript reserved keywords and primitive constants.
+     *
+     * @param {string} expression - The expression string to extract variables from.
+     * @returns {Array<string>} An array of unique variable names found in the expression.
+     * Variables are returned in their base form (i.e., the part before any dot notation or brackets).
+     */
     extractVariables(expression) {
-        // A simple option for extracting variables from expression
+        
         const variables = [];
         const parts = expression.split(/[^a-zA-Z0-9_.]/);
 
@@ -236,6 +391,20 @@ export default class ConditionalManager {
         return variables;
     }
 
+    
+    /**
+     * Retrieves all dependencies related to a specific path.
+     *
+     * This method scans through the dependencies map and collects all elements and their details
+     * that are associated with the given path. It also includes dependencies that match the base
+     * path and/or any sub-paths (e.g., 'path' and 'path.sub').
+     *
+     * @param {string} path - The path of the dependency to look for.
+     * @returns {Array<Object>} An array of dependency objects containing:
+     *    - {Element} element: The DOM element associated with the dependency.
+     *    - {string} expression: The original conditional expression linked to the dependency.
+     *    - {string} type: The type of the conditional ('if' or 'else-if').
+     */
     getDependenciesByPath(path) {
         const result = [];
 
@@ -248,10 +417,26 @@ export default class ConditionalManager {
         return result;
     }
 
-    // Safe assessment of expressions
+    
+    /**
+     * Evaluates a given expression within a specific context.
+     *
+     * This method can handle three types of input:
+     * 1. Expressions wrapped in double curly braces (`{{ }}`) are treated as
+     *    context paths and their values are retrieved using the `getValueFromContext` method.
+     * 2. Ternary, logical, and comparison operations within the expression
+     *    are parsed and evaluated using the `parseExpression` method.
+     * 3. Literal or primitive values (e.g., numbers, strings, booleans) are directly returned.
+     *
+     * Any parsing or evaluation errors are caught and logged.
+     *
+     * @param {string} expression - The expression to evaluate.
+     * @param {Object} context - The object representing the evaluation context.
+     * @returns {*} The result of evaluating the expression. Returns `false` if an error occurs.
+     */
     evaluateExpression(expression, context) {
         try {
-            // Checking on templates {{PATH}}
+            
             if (expression.startsWith('{{') && expression.endsWith('}}')) {
                 const path = expression.substring(2, expression.length - 2).trim();
                 return this.getValueFromContext(context, path);
@@ -264,7 +449,19 @@ export default class ConditionalManager {
         }
     }
 
-    // Obtaining a value along the way in the object
+    
+    /**
+     * Retrieves a value from a given context object based on a dot-separated path.
+     *
+     * This method allows accessing nested properties or array elements from an object
+     * using a path string. If a part of the path references an array, you can include
+     * an array index (e.g., 'path.toArray[0]'). If the path is invalid or the property
+     * doesn't exist, the method will return undefined.
+     *
+     * @param {Object} obj - The context object to retrieve values from.
+     * @param {string} path - The dot-separated string representing the path to the value.
+     * @returns {*} The value located at the specified path, or undefined if not found.
+     */
     getValueFromContext(obj, path) {
         if (!path) return obj;
 
@@ -280,11 +477,30 @@ export default class ConditionalManager {
         }, obj);
     }
 
-    // Safe Parsing expressions
+    
+    /**
+     * Parses and evaluates a given expression within a provided context.
+     *
+     * This method handles several types of expressions, including:
+     * 1. Ternary expressions (`condition ? trueValue : falseValue`).
+     * 2. Logical expressions with `&&` (AND) and `||` (OR).
+     * 3. Comparison expressions (e.g., `===`, `!==`, `>`, `<`, `>=`, `<=`).
+     * 4. String literals inside single or double quotes.
+     * 5. Numeric literals (integers and floats).
+     * 6. Boolean literals (`true`, `false`), and `null`, `undefined`.
+     * 7. Context-based values, retrieved using the `getValueFromContext` method if the expression
+     *    is not a primitive value or an operation.
+     *
+     * The method uses recursion to parse and evaluate nested expressions.
+     *
+     * @param {string} expression - The expression to parse and evaluate.
+     * @param {Object} context - The object providing the evaluation context.
+     * @returns {*} The evaluated result of the expression, or `undefined` if the path does not exist in the context.
+     */
     parseExpression(expression, context) {
         expression = expression.trim();
 
-        // Processing of a thorns operator
+        
         const ternaryMatch = expression.match(/(.+?)\s*\?\s*(.+?)\s*:\s*(.+)/);
         if (ternaryMatch) {
             const [_, condition, trueExpr, falseExpr] = ternaryMatch;
@@ -293,7 +509,7 @@ export default class ConditionalManager {
                 : this.parseExpression(falseExpr, context);
         }
 
-        // Logic operators
+        
         if (expression.includes('&&')) {
             const parts = expression.split('&&');
             return parts.every(part => this.parseExpression(part.trim(), context));
@@ -304,7 +520,7 @@ export default class ConditionalManager {
             return parts.some(part => this.parseExpression(part.trim(), context));
         }
 
-        // Comparison operators
+        
         const comparisonMatch = expression.match(/(.+?)\s*(===|==|!==|!=|>=|<=|>|<)\s*(.+)/);
         if (comparisonMatch) {
             const [_, left, operator, right] = comparisonMatch;
@@ -323,27 +539,33 @@ export default class ConditionalManager {
             }
         }
 
-        // String literals
+        
         if ((expression.startsWith("'") && expression.endsWith("'")) ||
             (expression.startsWith('"') && expression.endsWith('"'))) {
             return expression.substring(1, expression.length - 1);
         }
 
-        // Numerical literals
+        
         if (/^-?\d+(\.\d+)?$/.test(expression)) {
             return parseFloat(expression);
         }
 
-        // Boolean Literals and null/undefined
+        
         if (expression === 'true') return true;
         if (expression === 'false') return false;
         if (expression === 'null') return null;
         if (expression === 'undefined') return undefined;
 
-        // Obtaining a value from context
+        
         return this.getValueFromContext(context, expression);
     }
-    
+
+    /**
+     * Cleans up the instance by clearing dependencies and resetting conditional groups.
+     *
+     * This method should be called to release resources and avoid memory leaks when
+     * the instance of the class is no longer required.
+     */
     destroy() {
         this.dependencies.clear();
         this.conditionalGroups = [];

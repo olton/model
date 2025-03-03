@@ -1,5 +1,16 @@
 import DevToolsWindowStyle from './dev-tools.style.js';
 
+/**
+ * A class for debugging and monitoring changes in a model's data and store events.
+ * Provides functionalities like time travel debugging, change logging, and more.
+ *
+ * @class ModelDevTools
+ * @param {Object} model - The model instance to be monitored.
+ * @param {Object} [options={}] - Configuration options for the dev tools.
+ * @param {boolean} [options.enabled=true] - Whether the dev tools are enabled.
+ * @param {boolean} [options.timeTravel=true] - Whether time travel debugging is enabled.
+ * @param {number} [options.maxSnapshots=50] - Maximum number of snapshots to retain for time travel.
+ */
 class ModelDevTools {
     constructor(model, options = {}) {
         this.model = model;
@@ -16,17 +27,28 @@ class ModelDevTools {
         this.initializeDevTools();
     }
 
+
+    /**
+     * Initializes the model development tools by:
+     * - Creating a global reference at window.__MODEL_DEVTOOLS__
+     * - Creating the dev tools panel in the DOM
+     * - Setting up model event listeners for debugging
+     */
     initializeDevTools() {
-        // We create a global object for access from the console
         window.__MODEL_DEVTOOLS__ = this;
-
-        // Add the Devtools panel
         this.createDevToolsPanel();
-
-        // We subscribe to the events of the model
         this.setupModelListeners();
     }
 
+
+    /**
+     * Creates the development tools panel in the DOM with:
+     * - A header with title and control buttons
+     * - Content area for debugging information
+     * - Styling from DevToolsWindowStyle
+     * - Close and Time Travel buttons with event handlers
+     * - Toggle button for panel visibility
+     */
     createDevToolsPanel() {
         const panel = document.createElement('div');
         panel.id = 'model-devtools-panel';
@@ -57,22 +79,29 @@ class ModelDevTools {
 
         document.body.appendChild(panel);
 
-        // Add a button for opening the panel
         this.createToggleButton();
 
         document.getElementById('devtools-close').onclick = () => this.togglePanel();
         document.getElementById('devtools-time-travel').onclick = () => this.showTimeTravelDialog();
     }
 
+
+    /**
+     * Displays the Time Travel dialog by:
+     * - Creating or reusing existing dialog container
+     * - Generating a reversed chronological list of snapshots
+     * - Formatting snapshot data (timestamp, type, property, old/new values)
+     * - Displaying changes in computed properties and value transitions
+     */
     showTimeTravelDialog() {
-        // Создаем диалог для time travel
+
         let dialog = document.getElementById('model-devtools-time-travel-dialog');
         if (!dialog) {
             dialog = document.createElement('div');
             dialog.id = "model-devtools-time-travel-dialog";
         }
 
-        // Формируем список состояний
+
         const statesList = [...this.history].reverse().map((snapshot, index) => `
             <div class="time-travel-item">
                 <div>Time: ${new Date(snapshot.timestamp).toLocaleTimeString()}</div>
@@ -97,6 +126,12 @@ class ModelDevTools {
         document.body.appendChild(dialog);
     }
 
+    
+    /**
+     * Creates a toggle button for the Model DevTools panel.
+     * The button is appended to the page and provides
+     * functionality to show or hide the dev tools panel.
+     */
     createToggleButton() {
         const button = document.createElement('button');
         button.id = "model-dev-tools-toggle-button";
@@ -106,8 +141,15 @@ class ModelDevTools {
         document.body.appendChild(button);
     }
 
+    
+    /**
+     * Sets up listeners for the model and its store to track and log changes,
+     * events, computed property updates, and array operations. This enables
+     * the Model DevTools to record snapshot history, provide time travel
+     * functionality, and update the display with relevant data changes.
+     */
     setupModelListeners() {
-        // Tracking data changes
+
         this.model.store.on('change', (data) => {
             this.logChange({
                 type: 'data-change',
@@ -118,7 +160,7 @@ class ModelDevTools {
             });
         });
 
-        // Tracking events from the storage
+
         this.model.store.on('*', (eventName, data) => {
             if (eventName !== 'change' && eventName !== 'compute' && eventName !== 'arrayChange') {
                 this.logChange({
@@ -130,7 +172,7 @@ class ModelDevTools {
             }
         });
 
-        // Tracking the events of the model
+
         this.model.on('*', (eventName, data) => {
             if (eventName !== 'change' && eventName !== 'compute') {
                 this.logChange({
@@ -142,7 +184,7 @@ class ModelDevTools {
             }
         });
 
-        // Tracking the calculated properties
+
         this.model.store.on('compute', (data) => {
             this.logChange({
                 type: 'computed-update',
@@ -153,7 +195,7 @@ class ModelDevTools {
             });
         });
 
-        // Tracking changes in arrays
+
         this.model.store.on('arrayChange', (data) => {
             this.logChange({
                 type: 'array-operation',
@@ -167,39 +209,80 @@ class ModelDevTools {
         });
     }
 
+    
+    /**
+     * Logs a change entry and updates the Model DevTools display if enabled.
+     *
+     * - If the `timeTravel` option is enabled, the method saves a snapshot of the current state.
+     * - Updates the DevTools display to reflect the new changes.
+     *
+     * @param {Object} entry - The change entry to log.
+     * @param {string} entry.type - The type of change (e.g., 'data-change', 'model-event', etc.).
+     * @param {string} [entry.path] - Path of the property being changed (if applicable).
+     * @param {any} [entry.oldValue] - The previous value of the changed property (if applicable).
+     * @param {any} [entry.newValue] - The new value of the changed property (if applicable).
+     * @param {string} [entry.event] - The event name associated with the change (if applicable).
+     * @param {number} entry.timestamp - A timestamp indicating when the change occurred.
+     */
     logChange(entry) {
         if (!this.options.enabled) return;
 
-        // We retain a picture of the condition
+
         if (this.options.timeTravel) {
             this.saveSnapshot(entry);
         }
 
-        // We update the display
+
         this.updateDisplay();
     }
 
+    
+    /**
+     * Saves a snapshot of the current model state, including computed properties and relevant metadata.
+     *
+     * - Trims the history to ensure the size does not exceed `maxSnapshots`.
+     * - Updates the snapshot history and current snapshot index.
+     *
+     * @param {Object} entry - The change entry that triggered the snapshot.
+     * @param {string} entry.type - The type of change (e.g., 'data-change', 'model-event', etc.).
+     * @param {string} [entry.path] - Path of the property being changed (if applicable).
+     * @param {any} [entry.oldValue] - The previous value before the change (if applicable).
+     * @param {any} [entry.newValue] - The new value after the change (if applicable).
+     * @param {number} entry.timestamp - A timestamp indicating when the change occurred.
+     */
     saveSnapshot(entry) {
-        // We create a picture of the current state
+
         const snapshot = {
             ...entry,
             state: JSON.parse(JSON.stringify(this.model.data)),
-            // We get all the calculated properties
+
             computed: this.getComputedValues()
         };
 
-        // Add to history
+
         this.history = this.history.slice(0, this.currentIndex + 1);
         this.history.push(snapshot);
         this.currentIndex++;
 
-        // Limit the number of snapshots
+
         if (this.history.length > this.options.maxSnapshots) {
             this.history.shift();
             this.currentIndex--;
         }
     }
 
+    
+    /**
+     * Updates the display of the Model DevTools.
+     *
+     * - Retrieves and formats the current state, computed values, DOM dependencies, and
+     *   recent changes in the model.
+     * - Creates and dynamically sets the innerHTML content of the Model DevTools panel.
+     * - Triggers the time travel dialog if the corresponding element is present.
+     *
+     * This method ensures that the visual representation of the model remains up-to-date
+     * for debugging and monitoring purposes.
+     */
     updateDisplay() {
         const content = document.getElementById('model-devtools-content');
         if (!content) return;
@@ -225,7 +308,7 @@ class ModelDevTools {
             let changeContent;
 
             try {
-                // We format the Timestamp for a better display
+
                 const formattedChange = {
                     ...change,
                     timestamp: new Date(change.timestamp).toLocaleTimeString()
@@ -241,7 +324,7 @@ class ModelDevTools {
             </div>\n`;
         }
 
-        // We get current calculated values
+
         const computedValues = this.getComputedValues();
 
         content.innerHTML = `
@@ -269,6 +352,16 @@ class ModelDevTools {
         }
     }
 
+    
+    /**
+     * Formats and returns a structured representation of model's DOM dependencies.
+     *
+     * - Loops through the DOM dependencies managed in the model.
+     * - Converts the `Map` structure into a plain object for easier inspection.
+     * - Each dependency entry includes the type of dependency and the tag name of the associated element.
+     *
+     * @returns {string} A JSON string representing the formatted DOM dependencies.
+     */
     formatDOMDependencies() {
         try {
             const dependencies = {};
@@ -284,15 +377,25 @@ class ModelDevTools {
         }
     }
 
+    
+    /**
+     * Retrieves computed values from the model and returns them in a structured format.
+     *
+     * - If the model's `computed.all` function is available, all computed values are fetched at once.
+     * - If the model has a list of computed keys, their values are retrieved individually.
+     * - Falls back to iterating over model data keys and extracting computed values if present.
+     *
+     * @returns {Object} An object containing the computed values from the model.
+     */
     getComputedValues() {
-        // We check if there is an object of Computed and the Getall or Get method
+
         if (!this.model.computed) return {};
 
         if (typeof this.model.computed.all === 'function') {
             return this.model.computed.all();
         }
 
-        // If there is no specific method, we try to obtain properties through iteration
+
         if (this.model.computed.keys && Array.isArray(this.model.computed.keys)) {
             const result = {};
             for (const key of this.model.computed.keys) {
@@ -301,7 +404,7 @@ class ModelDevTools {
             return result;
         }
 
-        // If there is still no data, we are trying to get values from this.model.data
+
         const computedValues = {};
         for (const key in this.model.data) {
             if (this.model.computed && typeof this.model.computed[key] !== 'undefined') {
@@ -312,10 +415,26 @@ class ModelDevTools {
         return computedValues;
     }
 
+    
+    /**
+     * Retrieves the most recent changes from the history.
+     *
+     * - This method fetches the last 5 changes from the `history` array.
+     * - The returned changes are reversed to display the most recent change first.
+     *
+     * @returns {Array} An array of recent changes from the history.
+     */
     getRecentChanges() {
         return this.history.slice(-5).reverse();
     }
 
+    
+    /**
+     * Toggles the visibility of the development tools panel.
+     *
+     * - If the panel is currently hidden (`display: none`), it will be made visible.
+     * - If the panel is currently visible, it will be hidden.
+     */
     togglePanel() {
         const panel = document.getElementById('model-devtools-panel');
         if (panel) {
@@ -323,11 +442,34 @@ class ModelDevTools {
         }
     }
 
-    // API для консоли разработчика
+    
+    /**
+     * Retrieves the data stored at the specified path in the model's store.
+     *
+     * - The `path` parameter is used to access specific data within the store.
+     * - The method returns the value found at the given path.
+     *
+     * @param {string} path - The dot-notated path to retrieve the value from the store.
+     * @returns {*} The data stored at the specified path.
+     */
     inspect(path) {
         return this.model.store.get(path);
     }
 
+    
+    /**
+     * Toggles the visibility of the development tools panel in the UI.
+     *
+     * - The method checks the current display state of the panel element.
+     * - If the panel is hidden (`display: none`), it becomes visible (`block`).
+     * - If the panel is visible, it gets hidden.
+     *
+     * @example
+     * // Assuming an element with ID 'model-devtools-panel' exists:
+     * devTools.togglePanel();
+     *
+     * // This will toggle the panel's visibility between shown and hidden.
+     */
     timeTravel(index) {
         if (!this.options.timeTravel || true) return;
         if (index < 0 || index >= this.history.length) return;
@@ -335,20 +477,20 @@ class ModelDevTools {
         const snapshot = this.history[index];
 
         try {
-            // Temporarily turn off the listeners to avoid cycles
+
             const origEnabled = this.options.enabled;
             this.options.enabled = false;
 
-            // We load the condition from the snapshot
+
             this.model.store.setState(snapshot.state);
 
-            // Update the values of the calculated properties
+
             if (this.model.computed) {
-                // Check the presence of the Recompute method for all properties
+
                 if (typeof this.model.computed.recomputeAll === 'function') {
                     this.model.computed.recomputeAll();
                 } else {
-                    // If the Recompteall is absent, we try to update each property
+
                     for (const key in snapshot.computed) {
                         if (typeof this.model.computed.evaluate === 'function') {
                             this.model.computed.evaluate(key, true);
@@ -359,7 +501,7 @@ class ModelDevTools {
                 }
             }
 
-            // We update DOM
+
             this.model.dom.updateAllDOM();
 
             this.currentIndex = index;
@@ -368,8 +510,23 @@ class ModelDevTools {
             console.error('Error during time travel:', e);
         }
     }
+    
 
-    // Methods for analysis of performance
+    /**
+     * Starts performance monitoring for the model's store.
+     *
+     * - Sets up initial metrics counters for updates, computations, and DOM updates.
+     * - Begins tracking the performance of the model store.
+     * - Records changes and computations triggered on the store.
+     *
+     * @example
+     * const devTools = new ModelDevTools(model);
+     * devTools.startPerfMonitoring();
+     *
+     * // After some operations on the model:
+     * console.log(devTools.getPerfReport());
+     * // Outputs the performance metrics report.
+     */
     startPerfMonitoring() {
         this.perfMetrics = {
             updates: 0,
@@ -387,8 +544,21 @@ class ModelDevTools {
         });
     }
 
+    
     getPerfReport() {
         const duration = (Date.now() - this.perfMetrics.startTime) / 1000;
+        /**
+         * Generates a detailed performance metrics report based on store activity.
+         *
+         * - Calculates the total duration of performance monitoring in seconds.
+         * - Provides average metrics for updates, computations, and DOM updates per second.
+         *
+         * @returns {Object} An object containing performance metrics:
+         * - `totalUpdates` {number}: Total number of updates performed on the store.
+         * - `updatesPerSecond` {number}: Average number of store updates per second.
+         * - `computationsPerSecond` {number}: Average number of computations executed per second.
+         * - `domUpdatesPerSecond` {number}: Average number of DOM updates performed per second.
+         */
         return {
             totalUpdates: this.perfMetrics.updates,
             updatesPerSecond: this.perfMetrics.updates / duration,

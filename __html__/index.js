@@ -51,7 +51,7 @@ globalThis.enableButton = () => {
     app.data.path_to_image = "https://picsum.photos/id/4/200/300";
 }
 
-app.initDevTools({
+app.runDevTools({
     enabled: true,
     timeTravel: true,
     maxSnapshots: 50

@@ -2,7 +2,22 @@ import LoopManager from "./loop-manager.js";
 import ConditionalManager from "./conditional-manager.js";
 import AttributeManager from "./attribute-manager.js";
 
+/**
+ * The DOMManager class handles interactions with the DOM, including the registration of DOM dependencies,
+ * processing of template nodes, input binding for two-way data binding, and updates to the DOM elements
+ * based on the model's data.
+ */
 export default class DOMManager {
+
+    
+    /**
+     * Creates an instance of the DOMManager class, initializing necessary properties and dependencies
+     * for managing the DOM in relation to the model. Sets up managers for loops, conditionals, and attributes,
+     * and prepares structures for DOM dependencies and virtual DOM.
+     *
+     * @param {Object} model - The model that serves as the data source for the DOMManager.
+     *                         It is used for data binding and template rendering in the DOM.
+     */
     constructor(model) {
         this.model = model;
         this.elements = [];
@@ -15,7 +30,17 @@ export default class DOMManager {
         this.attributeManager = new AttributeManager(this, model);
     }
 
-    // Registration Dependencies DOM on Properties
+
+    /**
+     * Registers a dependency between a model property path and a DOM element.
+     * - Creates a new Set for the property path if it doesn't exist
+     * - Adds element and additional info to the dependency set
+     * - Supports multiple elements depending on the same property
+     *
+     * @param {string} propertyPath - Model property path to watch
+     * @param {HTMLElement} domElement - DOM element to update
+     * @param {Object} info - Additional dependency metadata
+     */
     registerDomDependency(propertyPath, domElement, info) {
         if (!this.domDependencies.has(propertyPath)) {
             this.domDependencies.set(propertyPath, new Set());
@@ -25,8 +50,17 @@ export default class DOMManager {
             ...info
         });
     }
-    
-    // Processes template adverbs
+
+    /**
+     * Recursively processes template nodes and replaces placeholders with values.
+     * - Handles text nodes: replaces {{expression}} with actual values
+     * - For text nodes: compares original and new content to avoid unnecessary updates
+     * - For element nodes: recursively processes all child nodes
+     * - Supports both context values and model store values
+     *
+     * @param {Node} node - DOM node to process
+     * @param {Object} context - Optional context data for placeholder replacement
+     */
     processTemplateNode(node, context) {
         if (node.nodeType === Node.TEXT_NODE) {
             const originalText = node.textContent;
@@ -38,14 +72,23 @@ export default class DOMManager {
                 node.textContent = newText;
             }
         } else if (node.nodeType === Node.ELEMENT_NODE) {
-            // Processing of subsidiary elements
+            
             Array.from(node.childNodes).forEach(child => {
                 this.processTemplateNode(child, context);
             });
         }
     }
 
-    // Parsim DOM to search for expressions {{variable}}
+    /**
+     * Parses DOM tree for template placeholders and sets up reactive bindings.
+     * - Uses TreeWalker to efficiently traverse text nodes
+     * - Detects template expressions using regex pattern
+     * - Registers dependencies for each found template expression
+     * - Preserves original template text for future updates
+     * - Handles regex state reset between matches
+     *
+     * @param {HTMLElement} root - Starting point for DOM traversal
+     */
     parse(root) {
         const walker = document.createTreeWalker(
             root,
@@ -61,19 +104,19 @@ export default class DOMManager {
             const text = node.textContent;
             const originalText = text;
 
-            // Сбрасываем индекс, чтобы проверить все совпадения заново
+            
             regex.lastIndex = 0;
 
             while ((match = regex.exec(text)) !== null) {
                 const propPath = match[1].trim();
 
-                // We register the dependence
+                
                 this.registerDomDependency(propPath, node, {
                     type: 'template',
                     template: originalText
                 });
 
-                // For compatibility with existing code
+                
                 this.elements.push({
                     node,
                     propName: propPath,
@@ -81,16 +124,16 @@ export default class DOMManager {
                 });
             }
 
-            // We keep the initial state in Virtualdom
+            
             this.virtualDom.set(node, node.textContent);
         }
 
-        // We find all Input elements with the Data-Model attribute
+        
         const inputs = root.querySelectorAll('[data-model]');
         inputs.forEach(input => {
             const property = input.getAttribute('data-model');
 
-            // Create a handler and save on an element
+            
             const handler = (e) => {
                 const value = input.type === 'checkbox' || input.type === 'radio'
                     ? e.target.checked
@@ -99,7 +142,7 @@ export default class DOMManager {
                 this.model.store.set(property, value);
             };
 
-            // We keep a link to the handle for the possibility of removing
+            
             input.__modelInputHandler = handler;
 
             input.addEventListener('input', handler);
@@ -110,8 +153,15 @@ export default class DOMManager {
             });
         });
     }
-
-    // Setting the value in the Input element
+    
+    /**
+     * Sets the value of the input element based on the provided value.
+     * For checkboxes and radio buttons, it sets the `checked` property.
+     * For other input types, it sets the `value` property.
+     *
+     * @param {HTMLInputElement} input - The input element to update.
+     * @param {*} value - The value to set for the input. For checkboxes and radio buttons, it should be a boolean.
+     */
     setInputValue(input, value) {
         if (input.type === 'checkbox' || input.type === 'radio') {
             input.checked = Boolean(value);
@@ -119,8 +169,14 @@ export default class DOMManager {
             input.value = value;
         }
     }
-
-    // Updating values in Input-elements when changing these models
+    
+    /**
+     * Updates all input elements associated with the specified property with the provided value.
+     * It ensures that the value in the DOM accurately reflects the value in the model.
+     *
+     * @param {string} propName - The name of the property whose value should be updated in the inputs.
+     * @param {*} value - The value to set for the associated inputs.
+     */
     updateInputs(propName, value) {
         this.inputs.forEach(item => {
             if (item.property === propName) {
@@ -128,10 +184,20 @@ export default class DOMManager {
             }
         });
     }
-
-    // We update the DOM elements that need this
+    
+    /**
+     * Updates all DOM elements based on the current state of the model.
+     * This includes:
+     * - Text nodes containing template placeholders.
+     * - Input elements bound using `data-model` attributes.
+     *
+     * Iterates through registered nodes and inputs, updating their content
+     * or values to reflect the latest model state.
+     *
+     * Ensures that the UI remains synchronized with the underlying model.
+     */
     updateAllDOM() {
-        // Update all the elements with templates
+        
         this.elements.forEach(element => {
             let newContent = element.template;
             newContent = newContent.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
@@ -141,27 +207,34 @@ export default class DOMManager {
             element.node.textContent = newContent;
         });
 
-        // We update all the inputs
+        
         this.inputs.forEach(item => {
             const value = this.model.store.get(item.property);
             this.setInputValue(item.element, value);
         });
     }
-
-    // DOM update when changing data
+    
+    /**
+     * Updates the DOM elements or attributes whenever a property in the model changes.
+     * It resolves what elements depending on the property should be updated,
+     * including templates, conditionals, loops, and attributes.
+     *
+     * @param {string} propertyPath - Path of the property in the model that triggered the change.
+     * @param {*} value - New value of the property (could be a primitive, object, or array).
+     */
     updateDOM(propertyPath, value) {
-        // We check whether this is an object of change from ApplyarrayMethod
+        
         const isArrayMethodChange = value && typeof value === 'object' && 'method' in value;
 
         if (isArrayMethodChange) {
-            // We use PATH from the object of change when changing the array
+            
             propertyPath = value.path || propertyPath;
         }
 
-        // We find all dependent elements - direct and associated with parental ways
+        
         const elementsToUpdate = new Set();
 
-        // Добавляем прямые совпадения
+        
         if (this.domDependencies.has(propertyPath)) {
             this.domDependencies.get(propertyPath).forEach(dep =>
                 elementsToUpdate.add(dep)
@@ -180,9 +253,7 @@ export default class DOMManager {
             //     }
             // }
         }
-
-        // Adding elements that depend on the parent path
-        // For example, if user.address.city changes, update the dependencies on user and user.address
+        
         const pathParts = propertyPath.split('.');
         let currentPath = '';
         for (let i = 0; i < pathParts.length; i++) {
@@ -193,8 +264,7 @@ export default class DOMManager {
                 );
             }
         }
-
-        // Updating Conditional Elements
+        
         const conditionalElements = this.conditionalManager.getDependenciesByPath(propertyPath);
         conditionalElements.forEach(dep => {
             if (dep.type === 'if') {
@@ -202,22 +272,18 @@ export default class DOMManager {
             }
         });
 
-        // Update elements that depend on child paths
-        // For example, if the user changes, update the dependencies on the user.name, user.address, etc.
         this.domDependencies.forEach((deps, path) => {
             if (path.startsWith(`${propertyPath}.`) || path.startsWith(`${propertyPath}[`)) {
                 deps.forEach(dep => elementsToUpdate.add(dep));
             }
         });
 
-        // Updating loops for arrays
         if (Array.isArray(value) || isArrayMethodChange || typeof value === 'object') {
             this.loopManager.updateLoops(propertyPath, value);
         }
 
         if (elementsToUpdate.size === 0) return;
-
-        // Grouping updates by type to reduce repainting
+        
         const updates = {
             template: [],
             conditional: [],
@@ -230,78 +296,121 @@ export default class DOMManager {
                 updates[dep.type].push(dep);
             }
         });
-
-        // Processing in groups
+        
         updates.template.forEach(dep => this.updateTemplateNode(dep.element, dep.template));
         updates.conditional.forEach(dep => this.conditionalManager.updateConditional(dep.element, dep.expression));
         updates.attribute.forEach(dep => this.attributeManager.updateAttribute(dep.element, dep.attribute, dep.expression));
         updates.loop.forEach(dep => this.loopManager.updateLoopPart(dep.element, dep.arrayPath, value, dep.index));
     }
     
-    // Text Template Update Method
+
+    /**
+     * Updates a template-based DOM node's content with the latest values
+     * from the model store.
+     *
+     * This method uses a Mustache-like syntax (e.g., `{{propertyName}}`)
+     * to replace placeholders in the template with actual values retrieved
+     * from the model store. If the content changes compared to the virtual DOM,
+     * the DOM node is updated, and the new content is recorded in the virtual DOM.
+     *
+     * @param {HTMLElement} node - The DOM node to update.
+     * @param {string} template - The template string containing placeholders
+     *                            for dynamic values.
+     */
     updateTemplateNode(node, template) {
         const newContent = template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
             path = path.trim();
             return this.model.store.get(path);
         });
 
-        // Update the DOM only if the content has changed
+        
         if (this.virtualDom.get(node) !== newContent) {
             node.textContent = newContent;
             this.virtualDom.set(node, newContent);
         }
     }
-
+    
+    /**
+     * Parses and processes attribute bindings in the provided root
+     * DOM element. Attributes prefixed with a colon (e.g., `:class`)
+     * are treated as dynamic bindings.
+     *
+     * For each dynamically bound attribute:
+     * - Updates the attribute value on the element based on the
+     *   current model store state.
+     * - Registers a dependency between the element and the attribute
+     *   expression in the DOM dependency tracker.
+     * - Removes the colon-prefixed attribute from the DOM.
+     *
+     * @param {HTMLElement} rootElement - The root element to search
+     *                                    for attribute bindings.
+     */
     parseAttributeBindings(rootElement) {
-        // Get all the elements inside the rootElement
+        
         const allElements = rootElement.querySelectorAll('*');
 
-        // Bypassing all elements
+        
         for (const element of allElements) {
-            // Get all the attributes of the element
+            
             const attributes = element.attributes;
 
             for (let i = 0; i < attributes.length; i++) {
                 const attr = attributes[i];
 
-                // Check if the attribute name begins with a colon (:)
+                
                 if (attr.name.startsWith(':')) {
-                    // Get the real name of the attribute (without the colon)
+                    
                     const realAttrName = attr.name.substring(1);
 
-                    // Derive the expression from the value of the
+                    
                     const expression = attr.value;
 
-                    // Setting the initial value of the
+                    
                     this.updateElementAttribute(element, realAttrName, expression);
 
-                    // Registering a dependency to update the attribute when the data changes
+                    
                     this.registerDomDependency(expression, element, {
                         type: 'attribute',
                         attribute: realAttrName,
                         expression: expression
                     });
 
-                    // Delete directive :attitude
+                    
                     element.removeAttribute(attr.name);
                 }
             }
         }
     }
 
-    // Method to update an element attribute
+    
+    /**
+     * Updates the value of a DOM element's attribute based on the current
+     * state of the model store.
+     *
+     * Dynamically handles specific attributes like `class`, `disabled`,
+     * `checked`, `selected`, and `readonly` to ensure they're properly assigned
+     * for Boolean or string values. For other attributes, it assigns the value
+     * directly.
+     *
+     * If the value for the given expression cannot be resolved from the model store,
+     * a warning is logged to the console.
+     *
+     * @param {HTMLElement} element - The DOM element whose attribute is being updated.
+     * @param {string} attribute - The name of the attribute to update.
+     * @param {string} expression - The model store expression to retrieve the value.
+     */
     updateElementAttribute(element, attribute, expression) {
         const value = this.model.store.get(expression);
 
         if (value !== undefined) {
-            // Handling special cases for some attributes
+            
             if (attribute === 'class') {
                 element.className = value;
             } else if (attribute === 'disabled' ||
                 attribute === 'checked' ||
                 attribute === 'selected' ||
                 attribute === 'readonly') {
-                // Boolean attributes
+                
                 if (value) {
                     element.setAttribute(attribute, '');
                 } else {
@@ -315,14 +424,37 @@ export default class DOMManager {
         }
     }
 
-    // Checks whether pathB's path is dependent on pathA's pathA
+    
+    /**
+     * Checks whether the given pathA is a dependency of pathB.
+     *
+     * A path is considered a dependency if:
+     * - It is identical to the other path.
+     * - It is a hierarchical descendent of the other path (e.g., pathB starts with pathA).
+     * - It is an array element of the other path (e.g., pathB starts with pathA followed by an array index).
+     *
+     * @param {string} pathA - The base path to check against.
+     * @param {string} pathB - The path to verify as a dependency.
+     * @returns {boolean} - Returns `true` if pathB is a dependency of pathA, otherwise `false`.
+     */
     isPathDependency(pathA, pathB) {
         return pathB === pathA ||
             pathB.startsWith(`${pathA}.`) ||
             pathB.startsWith(`${pathA}[`);
     }
 
-    // Finds all dependent paths
+    
+    /**
+     * Retrieves all paths from the DOM dependency tracker that are
+     * dependent on the given path. A path is considered dependent if:
+     * - It is hierarchically related (e.g., path starts with the given path).
+     * - It matches exactly with the given path.
+     *
+     * This method collects and returns all such dependent paths.
+     *
+     * @param {string} path - The path for which to find dependent paths.
+     * @returns {string[]} - An array of dependent paths.
+     */
     getDependentPaths(path) {
         const dependentPaths = [];
         this.domDependencies.forEach((_, depPath) => {
@@ -332,22 +464,59 @@ export default class DOMManager {
         });
         return dependentPaths;
     }
-    
+
+
+    /**
+     * Binds and processes the DOM for data binding, conditional rendering,
+     * loops, and attribute updates. This method integrates the different
+     * managers and processes involved in setting up the live DOM bindings.
+     *
+     * Steps performed:
+     * 1. Parses loops within the DOM using the loop manager.
+     * 2. Parses conditional elements using the conditional manager.
+     * 3. Parses standard attributes using the attribute manager.
+     * 4. Processes custom attribute bindings (colon-prefixed attributes).
+     * 5. Parses any additional elements or bindings.
+     * 6. Updates the DOM to reflect the current state of the model.
+     *
+     * @param {HTMLElement} rootElement - The root element to initiate the DOM binding process.
+     */
     bindDOM(rootElement){
         this.loopManager.parseLoops(rootElement);
         this.conditionalManager.parseConditionals(rootElement);
         this.attributeManager.parseAttributes(rootElement);
-        this.parseAttributeBindings(rootElement); // Обработка атрибутов (:attribute)
+        this.parseAttributeBindings(rootElement); 
         this.parse(rootElement);
         this.updateAllDOM();
     }
-
-    // Method for validation and error handling
+    
+    /**
+     * Validates the model for potential issues, including:
+     *
+     * 1. Cyclic dependencies in computed properties: Ensures that no property in the `computed`
+     *    object of the model depends on itself through a chain of other properties.
+     * 2. Invalid paths in DOM dependencies: Ensures that all paths used in the DOM template
+     *    exist within the model's store.
+     *
+     * @returns {{errors: Array<Object>, warnings: Array<Object>}} - Returns an object containing arrays
+     *          of errors and warnings. Each error or warning is represented as an object with details
+     *          about the issue.
+     *
+     * Errors include:
+     * - `CYCLIC_DEPENDENCY`: Indicates a cyclic dependency was found in `computed` properties.
+     *   - `property`: The property with the cyclic dependency.
+     *   - `message`: Description of the cyclic dependency.
+     *
+     * Warnings include:
+     * - `INVALID_PATH`: Indicates a path used in the DOM does not exist in the model.
+     *   - `path`: The invalid path.
+     *   - `message`: Description of the invalid path.
+     */
     validateModel() {
         const errors = [];
         const warnings = [];
 
-        // Проверяем наличие циклических зависимостей в computed свойствах
+        
         for (const key in this.model.computed) {
             const visited = new Set();
             const cyclePath = this.checkCyclicDependencies(key, visited);
@@ -360,7 +529,7 @@ export default class DOMManager {
             }
         }
 
-        // Checking for invalid expressions in templates
+        
         this.domDependencies.forEach((deps, path) => {
             if (!this.model.store.isValidPath(path)) {
                 warnings.push({
@@ -373,8 +542,20 @@ export default class DOMManager {
 
         return { errors, warnings };
     }
-
-    // Check for circular dependencies
+    
+    /**
+     * Checks for cyclic dependencies in the computed properties of the model.
+     *
+     * This method recursively traverses the dependencies of a given property to determine
+     * if a cyclic dependency exists. A cyclic dependency occurs when a property ultimately
+     * depends on itself through a chain of other properties.
+     *
+     * @param {string} key - The key of the property to check for cyclic dependencies.
+     * @param {Set<string>} visited - A set of visited properties during the traversal.
+     * @param {string[]} [path=[]] - The current path of dependencies being checked.
+     * @returns {string[]|null} - Returns an array representing the cyclic path if a cycle is found,
+     *                            otherwise `null`.
+     */
     checkCyclicDependencies(key, visited, path = []) {
         if (visited.has(key)) {
             return [...path, key];
@@ -399,8 +580,16 @@ export default class DOMManager {
 
         return null;
     }
-
-    // Releasing Resources
+    
+    /**
+     * Destroys the instance by performing cleanup tasks.
+     *
+     * This method removes event listeners from input elements, clears out
+     * internal data structures like `elements`, `inputs`, `domDependencies`,
+     * and `virtualDom`, and calls the `destroy` methods of `loopManager` and
+     * `conditionalManager`. It is intended to completely clean up the instance
+     * and free resources to avoid memory leaks.
+     */
     destroy() {
         this.inputs.forEach(({ element }) => {
             if (element.__modelInputHandler) {
@@ -408,8 +597,7 @@ export default class DOMManager {
                 delete element.__modelInputHandler;
             }
         });
-
-        // Очищаем все коллекции
+        
         this.elements = [];
         this.inputs = [];
         this.domDependencies.clear();

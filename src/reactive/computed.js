@@ -1,5 +1,15 @@
-import Logger from "../dev/logger.js";
-
+/**
+ * Manages computed properties in a reactive model system.
+ * - Initializes computed property getters
+ * - Tracks property dependencies automatically
+ * - Updates computed values on dependency changes
+ * - Supports nested object dependencies
+ *
+ * @class
+ * @property {Object} model - Host reactive model
+ * @property {Object} computed - Computed property definitions
+ * @property {Object} store - Reference to model's data store
+ */
 export default class ComputedProps {
     constructor(model, computed = {}) {
         this.model = model;
@@ -7,13 +17,19 @@ export default class ComputedProps {
         this.store = model.store;
     }
 
-    // Добавьте этот метод для инициализации обчислюваемых свойств
+    /**
+     * Sets up computed properties in the model.
+     * - Performs initial evaluation of all computed properties
+     * - Defines getter proxies on model.data
+     * - Makes computed properties enumerable and configurable
+     * - Ensures reactive updates through getter access
+     *
+     * @method init
+     */
     init() {
         for (const key in this.computed) {
-            // Вычисляем начальное значение
             this.evaluate(key);
-
-            // Делаем свойство доступным через this.data
+            
             Object.defineProperty(this.model.data, key, {
                 get: () => this.computed[key].value,
                 enumerable: true,
@@ -22,24 +38,37 @@ export default class ComputedProps {
         }
     }
 
-    // Обчислення значення computed властивості
+    /**
+     * Evaluates computed property and tracks its dependencies.
+     * - Creates proxy for dependency tracking
+     * - Handles nested object dependencies
+     * - Records all accessed properties during evaluation
+     * - Emits computation events with results
+     * - Supports forced re-evaluation
+     *
+     * @method evaluate
+     * @param {string} key - Computed property name
+     * @param {boolean} [force=false] - Force re-evaluation flag
+     * @returns {*} New computed value
+     * @emits compute
+     */
     evaluate(key, force = false) {
         const computed = this.computed[key];
 
         const dependencies = new Set();
         const dataTracker = new Proxy(this.store.getState(), {
             get: (target, prop) => {
-                // Додаємо базову властивість до залежностей
+
                 dependencies.add(prop);
 
-                // Отримуємо значення
+
                 let value = target[prop];
 
-                // Якщо значення є об'єктом, створюємо для нього проксі для відслідковування
+
                 if (value && typeof value === 'object') {
                     return new Proxy(value, {
                         get: (obj, nestedProp) => {
-                            // Додаємо повний шлях до залежностей
+
                             dependencies.add(`${prop}.${nestedProp}`);
                             return obj[nestedProp];
                         }
@@ -63,21 +92,30 @@ export default class ComputedProps {
         return result;
     }
 
+    /**
+     * Updates computed properties affected by model changes.
+     * Checks three types of dependencies:
+     * - Direct property matches
+     * - Nested property changes (parent changed)
+     * - Parent property changes (child changed)
+     * Re-evaluates affected computed properties
+     *
+     * @method update
+     * @param {string} changedProp - Changed property path
+     */
     update(changedProp) {
         for (const key in this.computed) {
             const computed = this.computed[key];
 
-            // Улучшенная проверка зависимостей
+
             const isDependency = computed.dependencies.some(dep => {
-                // Проверяем точное совпадение
+
                 if (dep === changedProp) return true;
 
-                // Проверяем, является ли изменившееся свойство частью зависимости
-                // Например, если изменилось user.name, а зависимость - user
+
                 if (changedProp.startsWith(dep + '.')) return true;
 
-                // Проверяем, является ли зависимость частью изменившегося свойства
-                // Например, если изменилось user, а зависимость - user.name
+
                 if (dep.startsWith(changedProp + '.')) return true;
 
                 return false;
@@ -86,14 +124,21 @@ export default class ComputedProps {
             if (isDependency) {
                 const newValue = this.evaluate(key);
 
-                // Оновлюємо DOM для обчислюваної властивості
+
                 this.model.dom.updateDOM(key, newValue);
                 this.model.dom.updateInputs(key, newValue);
             }
         }
     }
-
-    // Допоміжний метод для отримання всіх обчислюваних значень
+    
+    /**
+     * @method all
+     * @description Retrieves all computed properties and their current values.
+     * Converts the `computed` object into a plain object, mapping each computed
+     * property's name to its current value.
+     *
+     * @returns {Object} An object containing all computed property names and their values.
+     */
     all() {
         return Object.fromEntries(
             Object.entries(this.computed)

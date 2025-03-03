@@ -1,5 +1,24 @@
-// src/dom/loop-manager.js
+/**
+ * Manages dynamic loop rendering in the DOM based on data bindings.
+ * - Handles array iteration with data-for attribute
+ * - Handles object property iteration with data-in attribute
+ * - Maintains templates and dependencies for dynamic updates
+ * - Supports index/key variables in loop expressions
+ *
+ * @class
+ * @property {Map} loops - Stores array-based loop configurations
+ * @property {Array} loopsIn - Stores object-based loop configurations
+ */
 export default class LoopManager {
+
+    /**
+     * Creates a new instance of LoopManager.
+     *
+     * @param {Object} domManager - Manages DOM operations and template bindings
+     * @param {Object} model - Contains the data store and bindings
+     * @property {Map} loops - Stores array loop templates and configurations
+     * @property {Array} loopsIn - Stores object loop configurations and elements
+     */
     constructor(domManager, model) {
         this.domManager = domManager;
         this.model = model;
@@ -7,7 +26,25 @@ export default class LoopManager {
         this.loopsIn = []
     }
 
-    // Parsing loops in the DOM (data-for)
+    /**
+     * Parses and initializes both array and object loops in the DOM.
+     *
+     * For data-for loops:
+     * - Validates loop expression syntax (item[, index] in array)
+     * - Creates template clones for future updates
+     * - Registers array dependencies for reactive updates
+     * - Performs initial loop rendering
+     *
+     * For data-in loops:
+     * - Validates loop expression (key in object)
+     * - Stores original templates
+     * - Creates placeholder comments for loop position
+     * - Hides original elements
+     * - Performs initial object iteration rendering
+     *
+     * @param {HTMLElement} rootElement - Root element to scan for loop directives
+     * @throws {Error} Logs error for invalid loop expressions
+     */
     parseLoops(rootElement) {
         const loopElements = rootElement.querySelectorAll('[data-for]');
 
@@ -38,7 +75,7 @@ export default class LoopManager {
                 parentNode: element.parentNode
             });
 
-            // Registering a dependency to update the loop
+            
             this.domManager.registerDomDependency(arrayPath, element, {
                 type: 'loop',
                 arrayPath
@@ -47,7 +84,7 @@ export default class LoopManager {
             this.updateLoop(element);
         });
 
-        // Adding data-in processing
+        
         const inLoops = rootElement.querySelectorAll('[data-in]');
         inLoops.forEach(element => {
             const attributeValue = element.getAttribute('data-in');
@@ -68,13 +105,13 @@ export default class LoopManager {
             parent.insertBefore(placeholder, element);
 
             this.loopsIn.push({
-                type: 'in', // тип цикла - объект
+                type: 'in', 
                 originalElement: element,
                 template,
                 placeholder,
                 objectPath,
                 keyVar,
-                elements: [] // elements generated for object properties
+                elements: [] 
             });
 
             const objectData = this.model.store.get(objectPath);
@@ -83,18 +120,28 @@ export default class LoopManager {
             }
         });
     }
-
-    // Update loops for objects
+    
+    /**
+     * Updates the content of object-based loops (`data-in`) when the associated object data changes.
+     *
+     * This method clears the current DOM elements generated for the loop, then iterates through
+     * the provided `objectData` to render new elements based on the loop's template. It uses the
+     * `keyVar` for the object's keys and binds the DOM elements for further updates.
+     *
+     * @param {Object} loop - The loop configuration containing details such as the template,
+     *                        placeholder, and object path.
+     * @param {Object} objectData - The new object data used to generate loop elements.
+     */
     updateInLoop(loop, objectData) {
         loop.elements.forEach(el => el.remove());
         loop.elements = [];
 
-        // If there is no data or it is not an object, do not create elements
+        
         if (!objectData || typeof objectData !== 'object' || Array.isArray(objectData)) {
             return;
         }
 
-        // Traverse the properties of the object and create the
+        
         Object.keys(objectData).forEach(key => {
             const newElement = loop.originalElement.cloneNode(true);
             newElement.removeAttribute('data-in');
@@ -114,6 +161,20 @@ export default class LoopManager {
         });
     }
 
+    
+    /**
+     * Processes a template string by replacing placeholders with computed values
+     * based on the given object data, key, and context.
+     *
+     * Placeholder syntax: `{{ path }}`, where `path` can refer to variable keys,
+     * object properties, or dynamic expressions.
+     *
+     * @param {string} template - The template string containing placeholders.
+     * @param {Object} objectData - The object data used for resolving placeholders.
+     * @param {string} key - The current key in the object data.
+     * @param {Object} itemContext - The context containing additional data such as the key variable.
+     * @returns {string} - The processed template string with placeholders replaced by their respective values.
+     */
     processTemplate(template, objectData, key, itemContext) {
         return template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
             path = path.trim();
@@ -144,15 +205,25 @@ export default class LoopManager {
         });
     }
     
+    /**
+     * Updates all the loops (`data-for` and `data-in`) when the data in the store changes.
+     *
+     * Specifically:
+     * - Updates array-based loops (`data-for`) if the associated array data changes.
+     * - Updates object-based loops (`data-in`) if the associated object or its child properties change.
+     *
+     * @param {string} path - The path of the data in the store that has changed.
+     * @param {*} value - The new value at the given path.
+     */
     updateLoops(path, value) {
-        // data-for
+        
         this.loops.forEach((loopInfo, element) => {
             if (loopInfo.arrayPath === path) {
                 this.updateLoop(element);
             }
         });
 
-        // data-in
+        
         this.loopsIn.forEach(loop => {
             if (loop.type === 'in' && (loop.objectPath === path || path.startsWith(loop.objectPath + '.'))) {
                 const objectData = this.model.store.get(loop.objectPath);
@@ -163,6 +234,18 @@ export default class LoopManager {
         });
     }
 
+    
+    /**
+     * Updates the loops and maintains synchronization of the DOM elements
+     * based on changes in the store data. Handles both 'data-for' (array-based)
+     * and 'data-in' (object-based) loops.
+     *
+     * - For 'data-for' loops: Refreshes the associated elements when the array changes.
+     * - For 'data-in' loops: Synchronizes the DOM with the changes in the object.
+     *
+     * @param {string} path - Path of the changed data in the store.
+     * @param {*} value - New value of the updated data.
+     */
     updateLoop(element) {
         const loopInfo = this.loops.get(element) || this.loopsIn.find(loop => loop.originalElement === element)[0];
         
@@ -200,6 +283,19 @@ export default class LoopManager {
         element.style.display = 'none';
     }
 
+    
+    /**
+     * Partially updates a single DOM element within a loop based on changes in
+     * the associated array. Specifically:
+     * - If the changed index is provided, updates only the element at that index.
+     * - If no changed index is provided or if the array length does not match
+     *   the number of generated elements, falls back to a full loop update.
+     *
+     * @param {HTMLElement} element - The loop's original template element.
+     * @param {string} arrayPath - The path to the array in the data store associated with this loop.
+     * @param {*} changedValue - The updated value in the array (optional).
+     * @param {number} changedIndex - The index of the updated value in the array (optional).
+     */
     updateLoopPart(element, arrayPath, changedValue, changedIndex) {
         const loopInfo = this.loops.get(element);
         if (!loopInfo) return;
@@ -240,14 +336,28 @@ export default class LoopManager {
         }
     }
     
+    /**
+     * Returns an object containing the tracked loops in the current instance.
+     *
+     * @returns {Object} An object with two properties:
+     * - `for`: A Map of loops associated with array-based (`data-for`) rendering.
+     * - `in`: An array of loops associated with object-based (`data-in`) rendering.
+     */
     getLoops() {
         return {
             "for": this.loops,
             "in": this.loopsIn
         }
     }
-
+    
+    /**
+     * Destroys all tracked loops by clearing the internal Map of `data-for` loops.
+     *
+     * This method should be called when the instance is no longer needed
+     * to release memory and cleanup loop references.
+     */
     destroy() {
         this.loops.clear();
+        this.loopsIn = [];
     }
 }
