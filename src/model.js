@@ -157,7 +157,7 @@ class Model extends EventEmitter {
             Model.debug('An array was obtained:', array);
 
             if (!Array.isArray(array)) {
-                Model.error(`The value in the way ${arrayPath} is not an array:`, array);
+                Model.error(`The value in the path ${arrayPath} is not an array:`, array);
                 return;
             }
 
