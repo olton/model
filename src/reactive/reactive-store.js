@@ -260,10 +260,17 @@ export default class ReactiveStore extends EventEmitter {
         const result = array[method].apply(array, args);
 
         // Генерируем событие изменения массива
-        this.emit('change', {
+        this.emit('arrayChange', {
             path,
             method,
             args,
+            oldValue: oldArray,
+            newValue: [...array]
+        });
+        
+        // Генерируем событие изменения массива
+        this.emit('change', {
+            path,
             oldValue: oldArray,
             newValue: [...array]
         });
@@ -277,6 +284,39 @@ export default class ReactiveStore extends EventEmitter {
 
         return result;
     }
+
+    // Специализированные методы для массивов
+    // Пример использования:
+    // model.applyArrayChanges('users', (users) => users.push({ name: 'Новый пользователь' }));
+    applyArrayChanges(path, callback) {
+        const array = this.get(path);
+
+        if (!Array.isArray(array)) {
+            console.error(`The path ${path} is not an array!`);
+            return false;
+        }
+
+        // Сохраняем старое состояние массива
+        const oldArray = [...array];
+        const result = callback(array);
+
+        // Генерируем событие изменения массива
+        this.emit('change', {
+            path,
+            oldValue: oldArray,
+            newValue: [...array]
+        });
+
+        // Вызываем наблюдателей для массива
+        if (this.watchers.has(path)) {
+            this.watchers.get(path).forEach(callback => {
+                callback([...array], oldArray);
+            });
+        }
+
+        return result
+    }
+
 
     // Метод для спостереження за змінами
     watch(path, callback) {

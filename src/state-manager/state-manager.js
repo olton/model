@@ -16,46 +16,16 @@ export default class StateManager {
     }
 
     save(){
-        if (!StateManager.isStorageAvailable()) {
-            console.warn('localStorage is not available');
-            return null;
-        }
 
-        const dataToSave = JSON.parse(JSON.stringify(this.store.getState()));
-        
-        const state = {
-            data: dataToSave,
-            timestamp: Date.now()
-        };
-
-        try {
-            localStorage.setItem(this.options.id, JSON.stringify(state));
-            return state;
-        } catch (error) {
-            console.error('Error saving state:', error);
-            return null;
-        }
     }
     
     load(){
-        if (!StateManager.isStorageAvailable()) {
-            console.warn('localStorage is not available');
-            return null;
-        }
         
-        const savedState = localStorage.getItem(this.options.id);
-        
-        if (savedState) {
-            const parsed = JSON.parse(savedState);
-            Object.assign(this.store.state, parsed.data);
-            return parsed.data;
-        }
     }
     
-    snapshot(){}
-
-
-    // Допоміжний метод перевірки доступності localStorage
+    snapshot(){
+        
+    }
 
     // Збереження стану
     // saveState() {

@@ -28,7 +28,8 @@ globalThis.updateCounter = (operator) => {
 
 globalThis.addItem = () => {
     // app.data.items.push(`Item ${app.data.items.length + 1}`)
-    app.store.applyArrayMethod('items', 'push', `Item ${app.data.items.length + 1}`);
+    // app.store.applyArrayMethod('items', 'push', `Item ${app.data.items.length + 1}`);
+    app.store.applyArrayChanges('items', items => items.push(`Item ${app.data.items.length + 1}`));
 }
 
 // app.initDevTools({

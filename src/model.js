@@ -12,16 +12,10 @@ const ModelOptions = {
 
 class Model extends EventEmitter {
     constructor(data = {}, options = {}) {
-        Logger.DEBUG_LEVEL = Logger.DEBUG_LEVELS.DEBUG;
-
-        Logger.debug('Model initialization with data:', data);
-
         super();
        
         this.options = Object.assign({}, ModelOptions, options);
         this.computed = {};
-        this.events = new Map();
-        this.autoSaveInterval = null;
 
         // Реєструємо обчислювані властивості
         for (const key in data) {
@@ -92,37 +86,7 @@ class Model extends EventEmitter {
     initDevTools(options = {}) {
         return new DevTools(this, options);
     }
-
-    // Специализированные методы для массивов
-    // Пример использования:
-    // model.applyArrayChanges('users', (users) => users.push({ name: 'Новый пользователь' }));
-    applyArrayChanges(arrayPath, callback) {
-        const array = this.store.get(arrayPath);
-        if (!Array.isArray(array)) {
-            Logger.error(`The path ${arrayPath} is not an array!`);
-            return false;
-        }
-
-        this.batchProcessing = true;
-        let result;
-
-        try {
-            result = callback(array);
-
-            // Обновляем циклы только для измененного массива
-            this.loops.forEach((loopInfo, element) => {
-                if (loopInfo.arrayPath === arrayPath) {
-                    this.updateLoop(element);
-                }
-            });
-        } finally {
-            this.batchProcessing = false;
-            this.updateAllDOM();
-        }
-
-        return result;
-    }
-
+    
     // Добавим метод для валидации и обработки ошибок
     validateModel() {
         const errors = [];

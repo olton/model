@@ -84,7 +84,6 @@ export default class ComputedProps {
             });
 
             if (isDependency) {
-                Logger.debug(`Updating computed property: ${key}`);
                 const newValue = this.evaluate(key);
 
                 // Оновлюємо DOM для обчислюваної властивості

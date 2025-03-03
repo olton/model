@@ -1,5 +1,5 @@
 // src/dom-adapter/dom-adapter.js
-import Logger from '../dev/logger.js';
+import LoopManager from "./loop-manager.js";
 
 export default class DOMManager {
     constructor(model) {
@@ -8,7 +8,9 @@ export default class DOMManager {
         this.inputs = [];
         this.domDependencies = new Map();
         this.virtualDom = new Map();
-        this.loops = new Map();
+        // this.loops = new Map();
+        
+        this.loopManager = new LoopManager(this, model);
     }
 
     // Регистрация зависимости DOM от свойства
@@ -23,89 +25,79 @@ export default class DOMManager {
     }
 
     // Парсим DOM для поиска циклов (data-for)
-    parseLoops(rootElement) {
-        Logger.debug('Looking for items with data-for...');
-        const loopElements = rootElement.querySelectorAll('[data-for]');
-        Logger.debug('Found items from data-for:', loopElements.length);
-
-        loopElements.forEach((element, index) => {
-            const expression = element.getAttribute('data-for').trim();
-            Logger.debug(`Element processing ${index}:`, expression);
-
-            const matches = expression.match(/^\s*(\w+)(?:\s*,\s*(\w+))?\s+in\s+(\w+(?:\.\w+)*)\s*$/);
-
-            if (!matches) {
-                console.error('Incorrect format of expression data-for:', expression);
-                return;
-            }
-
-            const [_, itemName, indexName, arrayPath] = matches;
-            Logger.debug('The expression is dismantled:', {itemName, indexName, arrayPath});
-
-            const array = this.model.store.get(arrayPath);
-            Logger.debug('An array was obtained:', array);
-
-            if (!Array.isArray(array)) {
-                Logger.error(`The value in the path ${arrayPath} is not an array:`, array);
-                return;
-            }
-
-            const template = element.cloneNode(true);
-
-            this.loops.set(element, {
-                template,
-                itemName,
-                indexName,
-                arrayPath,
-                parentNode: element.parentNode
-            });
-
-            Logger.debug('Update the loop for the item');
-            this.updateLoop(element);
-        });
-    }
+    // parseLoops(rootElement) {
+    //     const loopElements = rootElement.querySelectorAll('[data-for]');
+    //
+    //     loopElements.forEach((element, index) => {
+    //         const expression = element.getAttribute('data-for').trim();
+    //         const matches = expression.match(/^\s*(\w+)(?:\s*,\s*(\w+))?\s+in\s+(\w+(?:\.\w+)*)\s*$/);
+    //
+    //         if (!matches) {
+    //             console.error('Incorrect format of expression data-for:', expression);
+    //             return;
+    //         }
+    //
+    //         const [_, itemName, indexName, arrayPath] = matches;
+    //         const array = this.model.store.get(arrayPath);
+    //
+    //         if (!Array.isArray(array)) {
+    //             console.error(`The value in the path ${arrayPath} is not an array:`, array);
+    //             return;
+    //         }
+    //
+    //         const template = element.cloneNode(true);
+    //
+    //         this.loops.set(element, {
+    //             template,
+    //             itemName,
+    //             indexName,
+    //             arrayPath,
+    //             parentNode: element.parentNode
+    //         });
+    //
+    //         this.updateLoop(element);
+    //     });
+    // }
 
     // Обновляем цикл
-    updateLoop(element) {
-        const loopInfo = this.loops.get(element);
-        if (!loopInfo) {
-            Logger.error('No loop information found for an item');
-            return;
-        }
-
-        const {template, itemName, indexName, arrayPath, parentNode} = loopInfo;
-        const array = this.model.store.get(arrayPath);
-
-        Logger.debug('Update loop for array:', array);
-
-        if (!Array.isArray(array)) {
-            Logger.error('The value is not an array:', array);
-            return;
-        }
-
-        // Удаляем предыдущие сгенерированные элементы
-        const generated = parentNode.querySelectorAll(`[data-generated-for="${arrayPath}"]`);
-        generated.forEach(el => el.remove());
-
-        // Создаем новые элементы
-        array.forEach((item, index) => {
-            const newNode = template.cloneNode(true);
-            newNode.style.display = '';
-            newNode.removeAttribute('data-for');
-            newNode.setAttribute('data-generated-for', arrayPath);
-
-            // Заменяем переменные в шаблоне
-            this.processTemplateNode(newNode, {
-                [itemName]: item,
-                [indexName || 'index']: index
-            });
-
-            parentNode.insertBefore(newNode, element);
-        });
-
-        // Скрываем оригинальный шаблон
-        element.style.display = 'none';
-    }
+    // updateLoop(element) {
+    //     const loopInfo = this.loops.get(element);
+    //     if (!loopInfo) {
+    //         console.error('No loop information found for an item');
+    //         return;
+    //     }
+    //
+    //     const {template, itemName, indexName, arrayPath, parentNode} = loopInfo;
+    //     const array = this.model.store.get(arrayPath);
+    //
+    //     if (!Array.isArray(array)) {
+    //         console.error('The value is not an array:', array);
+    //         return;
+    //     }
+    //
+    //     // Удаляем предыдущие сгенерированные элементы
+    //     const generated = parentNode.querySelectorAll(`[data-generated-for="${arrayPath}"]`);
+    //     generated.forEach(el => el.remove());
+    //
+    //     // Создаем новые элементы
+    //     array.forEach((item, index) => {
+    //         const newNode = template.cloneNode(true);
+    //         newNode.style.display = '';
+    //         newNode.removeAttribute('data-for');
+    //         newNode.setAttribute('data-generated-for', arrayPath);
+    //
+    //         // Заменяем переменные в шаблоне
+    //         this.processTemplateNode(newNode, {
+    //             [itemName]: item,
+    //             [indexName || 'index']: index
+    //         });
+    //
+    //         parentNode.insertBefore(newNode, element);
+    //     });
+    //
+    //     // Скрываем оригинальный шаблон
+    //     element.style.display = 'none';
+    // }
 
     // Обработка шаблонных узлов
     processTemplateNode(node, context) {
@@ -113,9 +105,7 @@ export default class DOMManager {
             const originalText = node.textContent;
             const newText = node.textContent.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
                 path = path.trim();
-                const value = context && path in context ? context[path] : this.model.store.get(path);
-                Logger.debug('Replacement in the template:', {original: match, path, value});
-                return value;
+                return context && path in context ? context[path] : this.model.store.get(path);
             });
             if (originalText !== newText) {
                 node.textContent = newText;
@@ -274,11 +264,7 @@ export default class DOMManager {
 
         // Обновляем циклы для массивов
         if (Array.isArray(value) || isArrayMethodChange) {
-            this.loops.forEach((loopInfo, element) => {
-                if (loopInfo.arrayPath === propertyPath) {
-                    this.updateLoop(element);
-                }
-            });
+            this.loopManager.updateLoops(propertyPath, value);
         }
 
         if (elementsToUpdate.size === 0) return;
@@ -300,7 +286,7 @@ export default class DOMManager {
         // Обрабатываем по группам
         updates.template.forEach(dep => this.updateTemplateNode(dep.element, dep.template));
         updates.conditional.forEach(dep => this.updateConditional(dep.element, dep.expression));
-        updates.loop.forEach(dep => this.updateLoopPart(dep.element, dep.arrayPath, value, dep.index));
+        updates.loop.forEach(dep => this.loopManager.updateLoopPart(dep.element, dep.arrayPath, value, dep.index));
         updates.attribute.forEach(dep => this.updateAttribute(dep.element, dep.attribute, dep.expression));
     }
 
@@ -347,52 +333,52 @@ export default class DOMManager {
     }
 
     // Обновление части цикла
-    updateLoopPart(element, arrayPath, changedValue, changedIndex) {
-        const loopInfo = this.loops.get(element);
-        if (!loopInfo) return;
-
-        const {template, itemName, indexName, parentNode} = loopInfo;
-        const array = this.model.store.get(arrayPath);
-
-        if (!Array.isArray(array)) return;
-
-        // Получаем существующие сгенерированные элементы
-        const generated = Array.from(
-            parentNode.querySelectorAll(`[data-generated-for="${arrayPath}"]`)
-        );
-
-        // Если изменений больше, чем элементов, обновляем все
-        if (changedIndex === undefined || generated.length !== array.length) {
-            return this.updateLoop(element);
-        }
-
-        // Обновляем только измененный элемент
-        const elementToUpdate = generated[changedIndex];
-        if (elementToUpdate) {
-            // Создаем новый элемент на основе шаблона
-            const newNode = template.cloneNode(true);
-
-            // Применяем контекст для нового элемента
-            this.processTemplateNode(newNode, {
-                [itemName]: array[changedIndex],
-                [indexName || 'index']: changedIndex
-            });
-
-            // Заменяем только содержимое, без удаления элемента
-            while (elementToUpdate.firstChild) {
-                elementToUpdate.removeChild(elementToUpdate.firstChild);
-            }
-
-            while (newNode.firstChild) {
-                elementToUpdate.appendChild(newNode.firstChild);
-            }
-
-            // Копируем атрибуты
-            Array.from(newNode.attributes).forEach(attr => {
-                elementToUpdate.setAttribute(attr.name, attr.value);
-            });
-        }
-    }
+    // updateLoopPart(element, arrayPath, changedValue, changedIndex) {
+    //     const loopInfo = this.loops.get(element);
+    //     if (!loopInfo) return;
+    //
+    //     const {template, itemName, indexName, parentNode} = loopInfo;
+    //     const array = this.model.store.get(arrayPath);
+    //
+    //     if (!Array.isArray(array)) return;
+    //
+    //     // Получаем существующие сгенерированные элементы
+    //     const generated = Array.from(
+    //         parentNode.querySelectorAll(`[data-generated-for="${arrayPath}"]`)
+    //     );
+    //
+    //     // Если изменений больше, чем элементов, обновляем все
+    //     if (changedIndex === undefined || generated.length !== array.length) {
+    //         return this.updateLoop(element);
+    //     }
+    //
+    //     // Обновляем только измененный элемент
+    //     const elementToUpdate = generated[changedIndex];
+    //     if (elementToUpdate) {
+    //         // Создаем новый элемент на основе шаблона
+    //         const newNode = template.cloneNode(true);
+    //
+    //         // Применяем контекст для нового элемента
+    //         this.processTemplateNode(newNode, {
+    //             [itemName]: array[changedIndex],
+    //             [indexName || 'index']: changedIndex
+    //         });
+    //
+    //         // Заменяем только содержимое, без удаления элемента
+    //         while (elementToUpdate.firstChild) {
+    //             elementToUpdate.removeChild(elementToUpdate.firstChild);
+    //         }
+    //
+    //         while (newNode.firstChild) {
+    //             elementToUpdate.appendChild(newNode.firstChild);
+    //         }
+    //
+    //         // Копируем атрибуты
+    //         Array.from(newNode.attributes).forEach(attr => {
+    //             elementToUpdate.setAttribute(attr.name, attr.value);
+    //         });
+    //     }
+    // }
 
     // Метод обновления текстового шаблона
     updateTemplateNode(node, template) {
@@ -466,7 +452,7 @@ export default class DOMManager {
                     this.updateAttribute(element, attributeName, expression);
                 }
             } catch (error) {
-                Logger.error('An error of analysis of attachments:', error);
+                console.error('An error of analysis of attachments:', error);
             }
         });
     }
@@ -483,7 +469,7 @@ export default class DOMManager {
             const func = new Function(...Object.keys(context), `return ${expression}`);
             return func(...Object.values(context));
         } catch (error) {
-            Logger.error('Error when evaluating expression:', error);
+            console.error('Error when evaluating expression:', error);
             return false;
         }
     }
@@ -507,44 +493,44 @@ export default class DOMManager {
     }
 
     // Оптимизированный метод для обнаружения изменений в массивах
-    detectArrayChanges(newArray, oldArray = []) {
-        const changes = {
-            added: [],
-            removed: [],
-            moved: []
-        };
-
-        // Находим добавленные и перемещенные элементы
-        for (let i = 0; i < newArray.length; i++) {
-            const item = newArray[i];
-            const oldIndex = oldArray.findIndex(oldItem =>
-                JSON.stringify(oldItem) === JSON.stringify(item)
-            );
-
-            if (oldIndex === -1) {
-                changes.added.push({ index: i, item });
-            } else if (oldIndex !== i) {
-                changes.moved.push({ oldIndex, newIndex: i, item });
-            }
-        }
-
-        // Находим удаленные элементы
-        for (let i = 0; i < oldArray.length; i++) {
-            const item = oldArray[i];
-            const newIndex = newArray.findIndex(newItem =>
-                JSON.stringify(newItem) === JSON.stringify(item)
-            );
-
-            if (newIndex === -1) {
-                changes.removed.push({ index: i, item });
-            }
-        }
-
-        return changes;
-    }
+    // detectArrayChanges(newArray, oldArray = []) {
+    //     const changes = {
+    //         added: [],
+    //         removed: [],
+    //         moved: []
+    //     };
+    //
+    //     // Находим добавленные и перемещенные элементы
+    //     for (let i = 0; i < newArray.length; i++) {
+    //         const item = newArray[i];
+    //         const oldIndex = oldArray.findIndex(oldItem =>
+    //             JSON.stringify(oldItem) === JSON.stringify(item)
+    //         );
+    //
+    //         if (oldIndex === -1) {
+    //             changes.added.push({ index: i, item });
+    //         } else if (oldIndex !== i) {
+    //             changes.moved.push({ oldIndex, newIndex: i, item });
+    //         }
+    //     }
+    //
+    //     // Находим удаленные элементы
+    //     for (let i = 0; i < oldArray.length; i++) {
+    //         const item = oldArray[i];
+    //         const newIndex = newArray.findIndex(newItem =>
+    //             JSON.stringify(newItem) === JSON.stringify(item)
+    //         );
+    //
+    //         if (newIndex === -1) {
+    //             changes.removed.push({ index: i, item });
+    //         }
+    //     }
+    //
+    //     return changes;
+    // }
 
     bindDOM(rootElement){
-        this.parseLoops(rootElement);
+        this.loopManager.parseLoops(rootElement);
         this.parseConditionals(rootElement);
         this.parseAttributes(rootElement);
         this.parse(rootElement);
@@ -566,6 +552,6 @@ export default class DOMManager {
         this.inputs = [];
         this.domDependencies.clear();
         this.virtualDom.clear();
-        this.loops.clear();
+        // this.loops.clear();
     }
 }

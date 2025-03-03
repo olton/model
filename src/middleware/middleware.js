@@ -5,7 +5,8 @@ class MiddlewareManager {
 
     use(middleware) {
         if (typeof middleware !== 'function') {
-            throw new Error('MIDDLEWARE should be a function!');
+            console.error('MIDDLEWARE should be a function!');
+            return;
         }
         this.middlewares.push(middleware);
     }
