@@ -25,7 +25,9 @@ const app = new Model({
         address: "New York, USA"
     },
     path_to_image: "https://picsum.photos/id/1/200/300",
-    is_disabled: true,
+    is_disabled(){
+        return this.counter <= 0;
+    },
 })
 
 app.init("#root")
@@ -46,7 +48,7 @@ globalThis.addItem = () => {
 }
 
 globalThis.enableButton = () => {
-    app.data.is_disabled = false;
+    app.data.path_to_image = "https://picsum.photos/id/4/200/300";
 }
 
 app.initDevTools({

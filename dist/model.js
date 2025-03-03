@@ -805,6 +805,35 @@ var ReactiveStore = class extends event_emitter_default {
     }
     return result;
   }
+  // Detect changes in the array
+  detectArrayChanges(newArray, oldArray = []) {
+    const changes = {
+      added: [],
+      removed: [],
+      moved: []
+    };
+    for (let i = 0; i < newArray.length; i++) {
+      const item = newArray[i];
+      const oldIndex = oldArray.findIndex(
+        (oldItem) => JSON.stringify(oldItem) === JSON.stringify(item)
+      );
+      if (oldIndex === -1) {
+        changes.added.push({ index: i, item });
+      } else if (oldIndex !== i) {
+        changes.moved.push({ oldIndex, newIndex: i, item });
+      }
+    }
+    for (let i = 0; i < oldArray.length; i++) {
+      const item = oldArray[i];
+      const newIndex = newArray.findIndex(
+        (newItem) => JSON.stringify(newItem) === JSON.stringify(item)
+      );
+      if (newIndex === -1) {
+        changes.removed.push({ index: i, item });
+      }
+    }
+    return changes;
+  }
   // Метод для спостереження за змінами
   watch(path, callback) {
     if (!this.watchers.has(path)) {
@@ -923,20 +952,20 @@ var LoopManager = class {
     this.loops = /* @__PURE__ */ new Map();
     this.loopsIn = [];
   }
-  // Парсинг циклов в DOM (data-for)
+  // Parsing loops in the DOM (data-for)
   parseLoops(rootElement) {
     const loopElements = rootElement.querySelectorAll("[data-for]");
     loopElements.forEach((element) => {
       const expression = element.getAttribute("data-for").trim();
       const matches = expression.match(/^\s*(\w+)(?:\s*,\s*(\w+))?\s+in\s+(\w+(?:\.\w+)*)\s*$/);
       if (!matches) {
-        console.error("\u041D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0439 \u0444\u043E\u0440\u043C\u0430\u0442 \u0432\u044B\u0440\u0430\u0436\u0435\u043D\u0438\u044F data-for:", expression);
+        console.error("Invalid expression format data-for:", expression);
         return;
       }
       const [_, itemName, indexName, arrayPath] = matches;
       const array = this.model.store.get(arrayPath);
       if (!Array.isArray(array)) {
-        console.error(`\u0417\u043D\u0430\u0447\u0435\u043D\u0438\u0435 \u043F\u043E \u043F\u0443\u0442\u0438 ${arrayPath} \u043D\u0435 \u044F\u0432\u043B\u044F\u0435\u0442\u0441\u044F \u043C\u0430\u0441\u0441\u0438\u0432\u043E\u043C:`, array);
+        console.error(`The value in the ${arrayPath} path is not an array:`, array);
         return;
       }
       const template = element.cloneNode(true);
@@ -976,7 +1005,7 @@ var LoopManager = class {
         objectPath,
         keyVar,
         elements: []
-        // элементы, сгенерированные для свойств объекта
+        // elements generated for object properties
       });
       const objectData = this.model.store.get(objectPath);
       if (objectData && typeof objectData === "object" && !Array.isArray(objectData)) {
@@ -984,6 +1013,7 @@ var LoopManager = class {
       }
     });
   }
+  // Update loops for objects
   updateInLoop(loop, objectData) {
     loop.elements.forEach((el) => el.remove());
     loop.elements = [];
@@ -1026,7 +1056,6 @@ var LoopManager = class {
       return "";
     });
   }
-  // Обновление всех циклов
   updateLoops(path, value) {
     this.loops.forEach((loopInfo, element) => {
       if (loopInfo.arrayPath === path) {
@@ -1042,9 +1071,8 @@ var LoopManager = class {
       }
     });
   }
-  // Обновление конкретного цикла
   updateLoop(element) {
-    const loopInfo = this.loops.get(element);
+    const loopInfo = this.loops.get(element) || this.loopsIn.find((loop) => loop.originalElement === element)[0];
     if (!loopInfo) {
       console.error("\u0418\u043D\u0444\u043E\u0440\u043C\u0430\u0446\u0438\u044F \u043E \u0446\u0438\u043A\u043B\u0435 \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u0430 \u0434\u043B\u044F \u044D\u043B\u0435\u043C\u0435\u043D\u0442\u0430");
       return;
@@ -1071,7 +1099,6 @@ var LoopManager = class {
     });
     element.style.display = "none";
   }
-  // Обновление части цикла
   updateLoopPart(element, arrayPath, changedValue, changedIndex) {
     const loopInfo = this.loops.get(element);
     if (!loopInfo) return;
@@ -1102,40 +1129,12 @@ var LoopManager = class {
       });
     }
   }
-  // Оптимизированный метод для обнаружения изменений в массивах
-  detectArrayChanges(newArray, oldArray = []) {
-    const changes = {
-      added: [],
-      removed: [],
-      moved: []
-    };
-    for (let i = 0; i < newArray.length; i++) {
-      const item = newArray[i];
-      const oldIndex = oldArray.findIndex(
-        (oldItem) => JSON.stringify(oldItem) === JSON.stringify(item)
-      );
-      if (oldIndex === -1) {
-        changes.added.push({ index: i, item });
-      } else if (oldIndex !== i) {
-        changes.moved.push({ oldIndex, newIndex: i, item });
-      }
-    }
-    for (let i = 0; i < oldArray.length; i++) {
-      const item = oldArray[i];
-      const newIndex = newArray.findIndex(
-        (newItem) => JSON.stringify(newItem) === JSON.stringify(item)
-      );
-      if (newIndex === -1) {
-        changes.removed.push({ index: i, item });
-      }
-    }
-    return changes;
-  }
-  // Получение всех зарегистрированных циклов
   getLoops() {
-    return this.loops;
+    return {
+      "for": this.loops,
+      "in": this.loopsIn
+    };
   }
-  // Очистка ресурсов
   destroy() {
     this.loops.clear();
   }
@@ -1643,7 +1642,7 @@ var DOMManager = class {
     updates.attribute.forEach((dep) => this.attributeManager.updateAttribute(dep.element, dep.attribute, dep.expression));
     updates.loop.forEach((dep) => this.loopManager.updateLoopPart(dep.element, dep.arrayPath, value, dep.index));
   }
-  // Метод обновления текстового шаблона
+  // Text Template Update Method
   updateTemplateNode(node, template) {
     const newContent = template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
       path = path.trim();
@@ -1674,7 +1673,7 @@ var DOMManager = class {
       }
     }
   }
-  // Метод для обновления атрибута элемента
+  // Method to update an element attribute
   updateElementAttribute(element, attribute, expression) {
     const value = this.model.store.get(expression);
     if (value !== void 0) {
@@ -1690,14 +1689,14 @@ var DOMManager = class {
         element.setAttribute(attribute, value);
       }
     } else {
-      console.warn(`\u0417\u043D\u0430\u0447\u0435\u043D\u0438\u0435 \u0434\u043B\u044F ${expression} \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E \u0432 \u043C\u043E\u0434\u0435\u043B\u0438`);
+      console.warn(`Value for ${expression} not found in the model`);
     }
   }
-  // Проверяет, зависит ли путь pathB от пути pathA
+  // Checks whether pathB's path is dependent on pathA's pathA
   isPathDependency(pathA, pathB) {
     return pathB === pathA || pathB.startsWith(`${pathA}.`) || pathB.startsWith(`${pathA}[`);
   }
-  // Находит все зависимые пути
+  // Finds all dependent paths
   getDependentPaths(path) {
     const dependentPaths = [];
     this.domDependencies.forEach((_, depPath) => {
@@ -1715,7 +1714,7 @@ var DOMManager = class {
     this.parse(rootElement);
     this.updateAllDOM();
   }
-  // Добавим метод для валидации и обработки ошибок
+  // Method for validation and error handling
   validateModel() {
     const errors = [];
     const warnings = [];
@@ -1741,7 +1740,7 @@ var DOMManager = class {
     });
     return { errors, warnings };
   }
-  // Проверяем наличие циклических зависимостей
+  // Check for circular dependencies
   checkCyclicDependencies(key, visited, path = []) {
     if (visited.has(key)) {
       return [...path, key];
@@ -1762,7 +1761,7 @@ var DOMManager = class {
     }
     return null;
   }
-  // Освобождение ресурсов
+  // Releasing Resources
   destroy() {
     this.inputs.forEach(({ element }) => {
       if (element.__modelInputHandler) {

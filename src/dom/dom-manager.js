@@ -181,8 +181,8 @@ export default class DOMManager {
             // }
         }
 
-        // Добавляем элементы, зависящие от родительского пути
-        // Например, если изменяется user.address.city, обновляем зависимости от user и user.address
+        // Adding elements that depend on the parent path
+        // For example, if user.address.city changes, update the dependencies on user and user.address
         const pathParts = propertyPath.split('.');
         let currentPath = '';
         for (let i = 0; i < pathParts.length; i++) {
@@ -194,7 +194,7 @@ export default class DOMManager {
             }
         }
 
-        // Обновляем условные элементы
+        // Updating Conditional Elements
         const conditionalElements = this.conditionalManager.getDependenciesByPath(propertyPath);
         conditionalElements.forEach(dep => {
             if (dep.type === 'if') {
@@ -202,22 +202,22 @@ export default class DOMManager {
             }
         });
 
-        // Обновляем элементы, зависящие от дочерних путей
-        // Например, если изменяется user, обновляем зависимости от user.name, user.address и т.д.
+        // Update elements that depend on child paths
+        // For example, if the user changes, update the dependencies on the user.name, user.address, etc.
         this.domDependencies.forEach((deps, path) => {
             if (path.startsWith(`${propertyPath}.`) || path.startsWith(`${propertyPath}[`)) {
                 deps.forEach(dep => elementsToUpdate.add(dep));
             }
         });
 
-        // Обновляем циклы для массивов
+        // Updating loops for arrays
         if (Array.isArray(value) || isArrayMethodChange || typeof value === 'object') {
             this.loopManager.updateLoops(propertyPath, value);
         }
 
         if (elementsToUpdate.size === 0) return;
 
-        // Группируем обновления по типу для уменьшения перерисовок
+        // Grouping updates by type to reduce repainting
         const updates = {
             template: [],
             conditional: [],
@@ -231,21 +231,21 @@ export default class DOMManager {
             }
         });
 
-        // Обрабатываем по группам
+        // Processing in groups
         updates.template.forEach(dep => this.updateTemplateNode(dep.element, dep.template));
         updates.conditional.forEach(dep => this.conditionalManager.updateConditional(dep.element, dep.expression));
         updates.attribute.forEach(dep => this.attributeManager.updateAttribute(dep.element, dep.attribute, dep.expression));
         updates.loop.forEach(dep => this.loopManager.updateLoopPart(dep.element, dep.arrayPath, value, dep.index));
     }
     
-    // Метод обновления текстового шаблона
+    // Text Template Update Method
     updateTemplateNode(node, template) {
         const newContent = template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
             path = path.trim();
             return this.model.store.get(path);
         });
 
-        // Обновляем DOM только если содержимое изменилось
+        // Update the DOM only if the content has changed
         if (this.virtualDom.get(node) !== newContent) {
             node.textContent = newContent;
             this.virtualDom.set(node, newContent);
@@ -253,55 +253,55 @@ export default class DOMManager {
     }
 
     parseAttributeBindings(rootElement) {
-        // Получаем все элементы внутри rootElement
+        // Get all the elements inside the rootElement
         const allElements = rootElement.querySelectorAll('*');
 
-        // Обходим все элементы
+        // Bypassing all elements
         for (const element of allElements) {
-            // Получаем все атрибуты элемента
+            // Get all the attributes of the element
             const attributes = element.attributes;
 
             for (let i = 0; i < attributes.length; i++) {
                 const attr = attributes[i];
 
-                // Проверяем, начинается ли имя атрибута с двоеточия (:)
+                // Check if the attribute name begins with a colon (:)
                 if (attr.name.startsWith(':')) {
-                    // Получаем реальное имя атрибута (без двоеточия)
+                    // Get the real name of the attribute (without the colon)
                     const realAttrName = attr.name.substring(1);
 
-                    // Получаем выражение из значения атрибута
+                    // Derive the expression from the value of the
                     const expression = attr.value;
 
-                    // Устанавливаем начальное значение атрибута
+                    // Setting the initial value of the
                     this.updateElementAttribute(element, realAttrName, expression);
 
-                    // Регистрируем зависимость для обновления атрибута при изменении данных
+                    // Registering a dependency to update the attribute when the data changes
                     this.registerDomDependency(expression, element, {
                         type: 'attribute',
                         attribute: realAttrName,
                         expression: expression
                     });
 
-                    // Удаляем директиву :attribute
+                    // Delete directive :attitude
                     element.removeAttribute(attr.name);
                 }
             }
         }
     }
 
-    // Метод для обновления атрибута элемента
+    // Method to update an element attribute
     updateElementAttribute(element, attribute, expression) {
         const value = this.model.store.get(expression);
 
         if (value !== undefined) {
-            // Обрабатываем особые случаи для некоторых атрибутов
+            // Handling special cases for some attributes
             if (attribute === 'class') {
                 element.className = value;
             } else if (attribute === 'disabled' ||
                 attribute === 'checked' ||
                 attribute === 'selected' ||
                 attribute === 'readonly') {
-                // Булевы атрибуты
+                // Boolean attributes
                 if (value) {
                     element.setAttribute(attribute, '');
                 } else {
@@ -311,18 +311,18 @@ export default class DOMManager {
                 element.setAttribute(attribute, value);
             }
         } else {
-            console.warn(`Значение для ${expression} не найдено в модели`);
+            console.warn(`Value for ${expression} not found in the model`);
         }
     }
 
-    // Проверяет, зависит ли путь pathB от пути pathA
+    // Checks whether pathB's path is dependent on pathA's pathA
     isPathDependency(pathA, pathB) {
         return pathB === pathA ||
             pathB.startsWith(`${pathA}.`) ||
             pathB.startsWith(`${pathA}[`);
     }
 
-    // Находит все зависимые пути
+    // Finds all dependent paths
     getDependentPaths(path) {
         const dependentPaths = [];
         this.domDependencies.forEach((_, depPath) => {
@@ -342,7 +342,7 @@ export default class DOMManager {
         this.updateAllDOM();
     }
 
-    // Добавим метод для валидации и обработки ошибок
+    // Method for validation and error handling
     validateModel() {
         const errors = [];
         const warnings = [];
@@ -360,7 +360,7 @@ export default class DOMManager {
             }
         }
 
-        // Проверка на невалидные выражения в шаблонах
+        // Checking for invalid expressions in templates
         this.domDependencies.forEach((deps, path) => {
             if (!this.model.store.isValidPath(path)) {
                 warnings.push({
@@ -374,7 +374,7 @@ export default class DOMManager {
         return { errors, warnings };
     }
 
-    // Проверяем наличие циклических зависимостей
+    // Check for circular dependencies
     checkCyclicDependencies(key, visited, path = []) {
         if (visited.has(key)) {
             return [...path, key];
@@ -400,9 +400,8 @@ export default class DOMManager {
         return null;
     }
 
-    // Освобождение ресурсов
+    // Releasing Resources
     destroy() {
-        // Удаляем обработчики событий с инпутов
         this.inputs.forEach(({ element }) => {
             if (element.__modelInputHandler) {
                 element.removeEventListener('input', element.__modelInputHandler);

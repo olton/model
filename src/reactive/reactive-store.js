@@ -317,6 +317,41 @@ export default class ReactiveStore extends EventEmitter {
         return result
     }
 
+    // Detect changes in the array
+    detectArrayChanges(newArray, oldArray = []) {
+        const changes = {
+            added: [],
+            removed: [],
+            moved: []
+        };
+
+        for (let i = 0; i < newArray.length; i++) {
+            const item = newArray[i];
+            const oldIndex = oldArray.findIndex(oldItem =>
+                JSON.stringify(oldItem) === JSON.stringify(item)
+            );
+
+            if (oldIndex === -1) {
+                changes.added.push({ index: i, item });
+            } else if (oldIndex !== i) {
+                changes.moved.push({ oldIndex, newIndex: i, item });
+            }
+        }
+
+        for (let i = 0; i < oldArray.length; i++) {
+            const item = oldArray[i];
+            const newIndex = newArray.findIndex(newItem =>
+                JSON.stringify(newItem) === JSON.stringify(item)
+            );
+
+            if (newIndex === -1) {
+                changes.removed.push({ index: i, item });
+            }
+        }
+
+        return changes;
+    }
+
     // Метод для спостереження за змінами
     watch(path, callback) {
         if (!this.watchers.has(path)) {

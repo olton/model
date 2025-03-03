@@ -7,7 +7,7 @@ export default class LoopManager {
         this.loopsIn = []
     }
 
-    // Парсинг циклов в DOM (data-for)
+    // Parsing loops in the DOM (data-for)
     parseLoops(rootElement) {
         const loopElements = rootElement.querySelectorAll('[data-for]');
 
@@ -16,7 +16,7 @@ export default class LoopManager {
             const matches = expression.match(/^\s*(\w+)(?:\s*,\s*(\w+))?\s+in\s+(\w+(?:\.\w+)*)\s*$/);
 
             if (!matches) {
-                console.error('Некорректный формат выражения data-for:', expression);
+                console.error('Invalid expression format data-for:', expression);
                 return;
             }
 
@@ -24,7 +24,7 @@ export default class LoopManager {
             const array = this.model.store.get(arrayPath);
 
             if (!Array.isArray(array)) {
-                console.error(`Значение по пути ${arrayPath} не является массивом:`, array);
+                console.error(`The value in the ${arrayPath} path is not an array:`, array);
                 return;
             }
 
@@ -38,7 +38,7 @@ export default class LoopManager {
                 parentNode: element.parentNode
             });
 
-            // Регистрируем зависимость для обновления цикла
+            // Registering a dependency to update the loop
             this.domManager.registerDomDependency(arrayPath, element, {
                 type: 'loop',
                 arrayPath
@@ -47,7 +47,7 @@ export default class LoopManager {
             this.updateLoop(element);
         });
 
-        // Добавляем обработку data-in
+        // Adding data-in processing
         const inLoops = rootElement.querySelectorAll('[data-in]');
         inLoops.forEach(element => {
             const attributeValue = element.getAttribute('data-in');
@@ -60,16 +60,13 @@ export default class LoopManager {
 
             const [_, keyVar, objectPath] = match;
 
-            // Сохраняем шаблон
             const template = element.innerHTML;
             const parent = element.parentNode;
             const placeholder = document.createComment(`data-in: ${attributeValue}`);
 
-            // Скрываем оригинальный элемент
             element.style.display = 'none';
             parent.insertBefore(placeholder, element);
 
-            // Сохраняем информацию для обновления
             this.loopsIn.push({
                 type: 'in', // тип цикла - объект
                 originalElement: element,
@@ -77,10 +74,9 @@ export default class LoopManager {
                 placeholder,
                 objectPath,
                 keyVar,
-                elements: [] // элементы, сгенерированные для свойств объекта
+                elements: [] // elements generated for object properties
             });
 
-            // Генерируем элементы при первом рендеринге
             const objectData = this.model.store.get(objectPath);
             if (objectData && typeof objectData === 'object' && !Array.isArray(objectData)) {
                 this.updateInLoop(this.loopsIn[this.loopsIn.length - 1], objectData);
@@ -88,38 +84,32 @@ export default class LoopManager {
         });
     }
 
+    // Update loops for objects
     updateInLoop(loop, objectData) {
-        // Очищаем предыдущие элементы
         loop.elements.forEach(el => el.remove());
         loop.elements = [];
 
-        // Если данных нет или это не объект, не создаем элементы
+        // If there is no data or it is not an object, do not create elements
         if (!objectData || typeof objectData !== 'object' || Array.isArray(objectData)) {
             return;
         }
 
-        // Обходим свойства объекта и создаем элементы
+        // Traverse the properties of the object and create the
         Object.keys(objectData).forEach(key => {
-            // Создаем новый элемент на основе шаблона
             const newElement = loop.originalElement.cloneNode(true);
             newElement.removeAttribute('data-in');
             newElement.style.display = '';
 
-            // Создаем контекст для данного ключа
             const itemContext = {
                 [loop.keyVar]: key,
             };
             
-            // Заполняем шаблон значениями
             newElement.innerHTML = this.processTemplate(loop.template, objectData, key, itemContext);
 
-            // Добавляем элемент в DOM
             loop.placeholder.parentNode.insertBefore(newElement, loop.placeholder.nextSibling);
 
-            // Сохраняем созданный элемент
             loop.elements.push(newElement);
 
-            // Обрабатываем вложенные директивы
             this.domManager.bindDOM(newElement);
         });
     }
@@ -129,12 +119,10 @@ export default class LoopManager {
             path = path.trim();
             const keyVar = Object.keys(itemContext)[0];
 
-            // Случай 1: Если путь точно равен имени переменной ключа
             if (path === keyVar) {
                 return key;
             }
 
-            // Случай 2: Обращение к объекту по ключу (например: objectPath[keyVar])
             const bracketRegex = new RegExp(`(\\w+)\\[${keyVar}\\]`);
             const bracketMatch = path.match(bracketRegex);
 
@@ -147,7 +135,6 @@ export default class LoopManager {
                 }
             }
 
-            // Случай 3: Доступ к данным вне цикла
             const value = this.model.store.get(path);
             if (value !== undefined) {
                 return value;
@@ -157,15 +144,15 @@ export default class LoopManager {
         });
     }
     
-    // Обновление всех циклов
     updateLoops(path, value) {
+        // data-for
         this.loops.forEach((loopInfo, element) => {
             if (loopInfo.arrayPath === path) {
                 this.updateLoop(element);
             }
         });
 
-        // Добавляем обработку изменения для data-in
+        // data-in
         this.loopsIn.forEach(loop => {
             if (loop.type === 'in' && (loop.objectPath === path || path.startsWith(loop.objectPath + '.'))) {
                 const objectData = this.model.store.get(loop.objectPath);
@@ -176,9 +163,9 @@ export default class LoopManager {
         });
     }
 
-    // Обновление конкретного цикла
     updateLoop(element) {
-        const loopInfo = this.loops.get(element);
+        const loopInfo = this.loops.get(element) || this.loopsIn.find(loop => loop.originalElement === element)[0];
+        
         if (!loopInfo) {
             console.error('Информация о цикле не найдена для элемента');
             return;
@@ -192,11 +179,9 @@ export default class LoopManager {
             return;
         }
 
-        // Удаляем предыдущие сгенерированные элементы
         const generated = parentNode.querySelectorAll(`[data-generated-for="${arrayPath}"]`);
         generated.forEach(el => el.remove());
 
-        // Создаем новые элементы
         array.forEach((item, index) => {
             const newNode = template.cloneNode(true);
             newNode.style.display = '';
@@ -204,7 +189,6 @@ export default class LoopManager {
             newNode.setAttribute('data-generated-for', arrayPath);
             newNode.setAttribute('data-item-index', index);
 
-            // Заменяем переменные в шаблоне
             this.domManager.processTemplateNode(newNode, {
                 [itemName]: item,
                 [indexName || 'index']: index
@@ -213,11 +197,9 @@ export default class LoopManager {
             parentNode.insertBefore(newNode, element);
         });
 
-        // Скрываем оригинальный шаблон
         element.style.display = 'none';
     }
 
-    // Обновление части цикла
     updateLoopPart(element, arrayPath, changedValue, changedIndex) {
         const loopInfo = this.loops.get(element);
         if (!loopInfo) return;
@@ -227,29 +209,23 @@ export default class LoopManager {
 
         if (!Array.isArray(array)) return;
 
-        // Получаем существующие сгенерированные элементы
         const generated = Array.from(
             parentNode.querySelectorAll(`[data-generated-for="${arrayPath}"]`)
         );
 
-        // Если изменений больше, чем элементов или изменен индекс не указан, обновляем все
         if (changedIndex === undefined || generated.length !== array.length) {
             return this.updateLoop(element);
         }
 
-        // Обновляем только измененный элемент
         const elementToUpdate = generated[changedIndex];
         if (elementToUpdate) {
-            // Создаем новый элемент на основе шаблона
             const newNode = template.cloneNode(true);
 
-            // Применяем контекст для нового элемента
             this.domManager.processTemplateNode(newNode, {
                 [itemName]: array[changedIndex],
                 [indexName || 'index']: changedIndex
             });
 
-            // Заменяем только содержимое, без удаления элемента
             while (elementToUpdate.firstChild) {
                 elementToUpdate.removeChild(elementToUpdate.firstChild);
             }
@@ -258,56 +234,19 @@ export default class LoopManager {
                 elementToUpdate.appendChild(newNode.firstChild);
             }
 
-            // Копируем атрибуты
             Array.from(newNode.attributes).forEach(attr => {
                 elementToUpdate.setAttribute(attr.name, attr.value);
             });
         }
     }
-
-    // Оптимизированный метод для обнаружения изменений в массивах
-    detectArrayChanges(newArray, oldArray = []) {
-        const changes = {
-            added: [],
-            removed: [],
-            moved: []
-        };
-
-        // Находим добавленные и перемещенные элементы
-        for (let i = 0; i < newArray.length; i++) {
-            const item = newArray[i];
-            const oldIndex = oldArray.findIndex(oldItem =>
-                JSON.stringify(oldItem) === JSON.stringify(item)
-            );
-
-            if (oldIndex === -1) {
-                changes.added.push({ index: i, item });
-            } else if (oldIndex !== i) {
-                changes.moved.push({ oldIndex, newIndex: i, item });
-            }
-        }
-
-        // Находим удаленные элементы
-        for (let i = 0; i < oldArray.length; i++) {
-            const item = oldArray[i];
-            const newIndex = newArray.findIndex(newItem =>
-                JSON.stringify(newItem) === JSON.stringify(item)
-            );
-
-            if (newIndex === -1) {
-                changes.removed.push({ index: i, item });
-            }
-        }
-
-        return changes;
-    }
-
-    // Получение всех зарегистрированных циклов
+    
     getLoops() {
-        return this.loops;
+        return {
+            "for": this.loops,
+            "in": this.loopsIn
+        }
     }
 
-    // Очистка ресурсов
     destroy() {
         this.loops.clear();
     }
