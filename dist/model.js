@@ -1,13 +1,13 @@
 
 /*!
  * Model v0.11.0
- * Build: 02.03.2025, 20:43:45
+ * Build: 03.03.2025, 08:22:35
  * Copyright 2012-2025 by Serhii Pimenov
  * Licensed under MIT
  */
 
 
-// src/event-emmiter.js
+// src/event-emitter/event-emitter.js
 var EventEmitter = class {
   constructor() {
     this.events = /* @__PURE__ */ new Map();
@@ -36,34 +36,9 @@ var EventEmitter = class {
     }
   }
 };
-var event_emmiter_default = EventEmitter;
+var event_emitter_default = EventEmitter;
 
-// src/middleware.js
-var MiddlewareManager = class {
-  constructor() {
-    this.middlewares = [];
-  }
-  use(middleware) {
-    if (typeof middleware !== "function") {
-      throw new Error("MIDDLEWARE should be a function!");
-    }
-    this.middlewares.push(middleware);
-  }
-  async process(context) {
-    let index = -1;
-    const next = async () => {
-      index++;
-      if (index < this.middlewares.length) {
-        await this.middlewares[index](context, next);
-      }
-    };
-    await next();
-    return context;
-  }
-};
-var middleware_default = MiddlewareManager;
-
-// src/dev-tools.js
+// src/dev/dev-tools.js
 var DevToolsWindowStyle = `
     <style>
         #model-devtools-panel  { 
@@ -459,12 +434,8 @@ var ModelDevTools = class {
 };
 var dev_tools_default = ModelDevTools;
 
-// src/model.js
-var ModelOptions = {
-  id: "model",
-  memoizeComputed: true
-};
-var Model = class _Model extends event_emmiter_default {
+// src/dev/logger.js
+var Logger = class _Logger {
   static DEBUG_LEVELS = {
     NONE: 0,
     ERROR: 1,
@@ -473,9 +444,9 @@ var Model = class _Model extends event_emmiter_default {
     DEBUG: 4,
     TRACE: 5
   };
-  static DEBUG_LEVEL = _Model.DEBUG_LEVELS.NONE;
+  static DEBUG_LEVEL = _Logger.DEBUG_LEVELS.NONE;
   static log(level, message, data) {
-    if (level > _Model.DEBUG_LEVEL) return;
+    if (level > _Logger.DEBUG_LEVEL) return;
     const styles = {
       error: "color: #ff5555; font-weight: bold",
       warn: "color: #ffaa00; font-weight: bold",
@@ -487,23 +458,23 @@ var Model = class _Model extends event_emmiter_default {
     let styleType;
     let method;
     switch (level) {
-      case _Model.DEBUG_LEVELS.ERROR:
+      case _Logger.DEBUG_LEVELS.ERROR:
         styleType = "error";
         method = console.error;
         break;
-      case _Model.DEBUG_LEVELS.WARN:
+      case _Logger.DEBUG_LEVELS.WARN:
         styleType = "warn";
         method = console.warn;
         break;
-      case _Model.DEBUG_LEVELS.INFO:
+      case _Logger.DEBUG_LEVELS.INFO:
         styleType = "info";
         method = console.info;
         break;
-      case _Model.DEBUG_LEVELS.DEBUG:
+      case _Logger.DEBUG_LEVELS.DEBUG:
         styleType = "debug";
         method = console.debug;
         break;
-      case _Model.DEBUG_LEVELS.TRACE:
+      case _Logger.DEBUG_LEVELS.TRACE:
         styleType = "trace";
         method = console.log;
         break;
@@ -518,49 +489,351 @@ var Model = class _Model extends event_emmiter_default {
   }
   // Методы для удобства
   static error(message, data) {
-    _Model.log(_Model.DEBUG_LEVELS.ERROR, message, data);
+    _Logger.log(_Logger.DEBUG_LEVELS.ERROR, message, data);
   }
   static warn(message, data) {
-    _Model.log(_Model.DEBUG_LEVELS.WARN, message, data);
+    _Logger.log(_Logger.DEBUG_LEVELS.WARN, message, data);
   }
   static info(message, data) {
-    _Model.log(_Model.DEBUG_LEVELS.INFO, message, data);
+    _Logger.log(_Logger.DEBUG_LEVELS.INFO, message, data);
   }
   static debug(message, data) {
-    _Model.log(_Model.DEBUG_LEVELS.DEBUG, message, data);
+    _Logger.log(_Logger.DEBUG_LEVELS.DEBUG, message, data);
   }
   static trace(message, data) {
-    _Model.log(_Model.DEBUG_LEVELS.TRACE, message, data);
+    _Logger.log(_Logger.DEBUG_LEVELS.TRACE, message, data);
   }
-  constructor(data = {}, options = {}) {
-    _Model.debug("Model initialization with data:", data);
+};
+
+// src/middleware/middleware.js
+var MiddlewareManager = class {
+  constructor() {
+    this.middlewares = [];
+  }
+  use(middleware) {
+    if (typeof middleware !== "function") {
+      throw new Error("MIDDLEWARE should be a function!");
+    }
+    this.middlewares.push(middleware);
+  }
+  async process(context) {
+    let index = -1;
+    const next = async () => {
+      index++;
+      if (index < this.middlewares.length) {
+        await this.middlewares[index](context, next);
+      }
+    };
+    await next();
+    return context;
+  }
+};
+var middleware_default = MiddlewareManager;
+
+// src/reactive/reactive-store.js
+var ReactiveStore = class extends event_emitter_default {
+  constructor(initialState = {}) {
     super();
-    this.options = Object.assign({}, ModelOptions, options);
+    this.state = this.createReactiveProxy(initialState);
+    this.watchers = /* @__PURE__ */ new Map();
+    this.previousState = JSON.parse(JSON.stringify(initialState));
+    this.middleware = new middleware_default();
+  }
+  use(middleware) {
+    this.middleware.use(middleware);
+  }
+  createReactiveProxy(obj, path = "") {
+    if (Array.isArray(obj)) {
+      return this.createArrayProxy(obj, path);
+    }
+    return new Proxy(obj, {
+      get: (target, prop) => {
+        if (typeof prop === "symbol") {
+          return target[prop];
+        }
+        const value = target[prop];
+        const fullPath = path ? `${path}.${prop}` : prop;
+        if (value && typeof value === "object") {
+          return this.createReactiveProxy(value, fullPath);
+        }
+        return value;
+      },
+      set: async (target, prop, value) => {
+        if (typeof prop === "symbol") {
+          target[prop] = value;
+          return true;
+        }
+        const fullPath = path ? `${path}.${prop}` : prop;
+        const oldValue = target[prop];
+        if (oldValue === value) {
+          return true;
+        }
+        if (this.validators?.has(`${fullPath}`)) {
+          const isValid = this.validators.get(`${fullPath}`)(value);
+          if (!isValid) return false;
+        }
+        if (this.formatters?.has(`${fullPath}`)) {
+          value = this.formatters.get(`${fullPath}`)(value);
+        }
+        if (value && typeof value === "object") {
+          value = this.createReactiveProxy(value, fullPath);
+        }
+        const context = {
+          prop,
+          oldValue,
+          newValue: value,
+          preventDefault: false
+        };
+        await this.middleware.process(context);
+        if (context.preventDefault) {
+          return true;
+        }
+        target[prop] = value;
+        this.emit("change", {
+          path: fullPath,
+          oldValue,
+          newValue: value
+        });
+        if (this.watchers.has(fullPath)) {
+          this.watchers.get(fullPath).forEach((callback) => {
+            callback(value, oldValue);
+          });
+        }
+        return true;
+      },
+      deleteProperty: (target, prop) => {
+        if (typeof prop === "symbol") {
+          return delete target[prop];
+        }
+        const fullPath = path ? `${path}.${prop}` : prop;
+        const oldValue = target[prop];
+        const result = delete target[prop];
+        if (result) {
+          this.emit("delete", {
+            path: fullPath,
+            oldValue
+          });
+          if (this.watchers.has(fullPath)) {
+            this.watchers.get(fullPath).forEach((callback) => {
+              callback(void 0, oldValue);
+            });
+          }
+        }
+        return result;
+      }
+    });
+  }
+  // Спеціальний проксі для масивів
+  createArrayProxy(array, path) {
+    return new Proxy(array, {
+      get: (target, prop) => {
+        const value = target[prop];
+        if (typeof value === "function" && ["push", "pop", "shift", "unshift", "splice", "sort", "reverse"].includes(prop)) {
+          return (...args) => {
+            const oldArray = [...target];
+            const result = target[prop].apply(target, args);
+            this.emit("arrayChange", {
+              path,
+              method: prop,
+              args,
+              oldValue: oldArray,
+              newValue: [...target]
+            });
+            if (this.watchers.has(path)) {
+              this.watchers.get(path).forEach((callback) => {
+                callback([...target], oldArray);
+              });
+            }
+            return result;
+          };
+        }
+        if (typeof prop !== "symbol" && !isNaN(Number(prop))) {
+          if (value && typeof value === "object") {
+            return this.createReactiveProxy(value, `${path}[${prop}]`);
+          }
+        }
+        return value;
+      },
+      set: async (target, prop, value) => {
+        if (typeof prop === "symbol") {
+          target[prop] = value;
+          return true;
+        }
+        const oldValue = target[prop];
+        if (oldValue === value) {
+          return true;
+        }
+        if (this.validators?.has(`${path}.${prop}`)) {
+          const isValid = this.validators.get(`${path}.${prop}`)(value);
+          if (!isValid) return false;
+        }
+        if (this.formatters?.has(`${path}.${prop}`)) {
+          value = this.formatters.get(`${path}.${prop}`)(value);
+        }
+        if (value && typeof value === "object") {
+          value = this.createReactiveProxy(value, `${path}[${prop}]`);
+        }
+        const context = {
+          prop,
+          oldValue,
+          newValue: value,
+          preventDefault: false
+        };
+        await this.middleware.process(context);
+        if (context.preventDefault) {
+          return true;
+        }
+        target[prop] = value;
+        this.emit("change", {
+          path: `${path}[${prop}]`,
+          oldValue,
+          newValue: value,
+          arrayIndex: Number(prop)
+        });
+        if (this.watchers.has(path)) {
+          this.watchers.get(path).forEach((callback) => {
+            callback([...target], void 0);
+          });
+        }
+        return true;
+      }
+    });
+  }
+  // Спеціалізований метод для масивів
+  applyArrayMethod(path, method, ...args) {
+    const array = this.get(path);
+    if (!Array.isArray(array)) {
+      console.error(`\u041F\u0443\u0442\u044C ${path} \u043D\u0435 \u044F\u0432\u043B\u044F\u0435\u0442\u0441\u044F \u043C\u0430\u0441\u0441\u0438\u0432\u043E\u043C!`);
+      return false;
+    }
+    const oldArray = [...array];
+    const result = array[method].apply(array, args);
+    this.emit("change", {
+      path,
+      method,
+      args,
+      oldValue: oldArray,
+      newValue: [...array]
+    });
+    if (this.watchers.has(path)) {
+      this.watchers.get(path).forEach((callback) => {
+        callback([...array], oldArray);
+      });
+    }
+    return result;
+  }
+  // Метод для спостереження за змінами
+  watch(path, callback) {
+    if (!this.watchers.has(path)) {
+      this.watchers.set(path, /* @__PURE__ */ new Set());
+    }
+    this.watchers.get(path).add(callback);
+    return () => {
+      if (this.watchers.has(path)) {
+        this.watchers.get(path).delete(callback);
+      }
+    };
+  }
+  // Метод для отримання значення за шляхом
+  get(path) {
+    if (!path) return this.state;
+    const parts = path.split(".");
+    let value = this.state;
+    for (const part of parts) {
+      if (value === void 0 || value === null) {
+        return void 0;
+      }
+      value = value[part];
+    }
+    return value;
+  }
+  // Метод для встановлення значення за шляхом
+  set(path, value) {
+    const parts = path.split(".");
+    let current = this.state;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (current[parts[i]] === void 0) {
+        current[parts[i]] = {};
+      }
+      current = current[parts[i]];
+    }
+    current[parts[parts.length - 1]] = value;
+    return value;
+  }
+  // Метод для пакетного оновлення 
+  batch(updater) {
+    this.previousState = JSON.parse(JSON.stringify(this.state));
+    if (typeof updater === "function") {
+      updater(this.state);
+    } else if (typeof updater === "object") {
+      Object.entries(updater).forEach(([path, value]) => {
+        this.set(path, value);
+      });
+    }
+    this.emit("batchUpdate", {
+      previousState: this.previousState,
+      currentState: this.state
+    });
+  }
+  // Повертає поточний стан
+  getState() {
+    return this.state;
+  }
+  // Повертає попередній стан
+  getPreviousState() {
+    return this.previousState;
+  }
+  // Сериалізує стан до JSON
+  toJSON() {
+    return JSON.stringify(this.state);
+  }
+  // Відновлює стан з JSON
+  fromJSON(json) {
+    const newState = JSON.parse(json);
+    this.previousState = JSON.parse(JSON.stringify(this.state));
+    Object.keys(this.state).forEach((key) => {
+      delete this.state[key];
+    });
+    Object.entries(newState).forEach(([key, value]) => {
+      this.state[key] = value;
+    });
+    this.emit("restore", {
+      previousState: this.previousState,
+      currentState: this.state
+    });
+  }
+  // Додаємо валідацію
+  addValidator(propertyPath, validator) {
+    if (!this.validators) {
+      this.validators = /* @__PURE__ */ new Map();
+    }
+    this.validators.set(propertyPath, validator);
+  }
+  // Додаємо форматування
+  addFormatter(propertyPath, formatter) {
+    if (!this.formatters) {
+      this.formatters = /* @__PURE__ */ new Map();
+    }
+    this.formatters.set(propertyPath, formatter);
+  }
+  destroy() {
+    this.state = null;
+    this.watchers.clear();
+    this.previousState = null;
+  }
+};
+
+// src/dom/dom-manager.js
+var DOMManager = class {
+  constructor(model) {
+    this.model = model;
     this.elements = [];
     this.inputs = [];
-    this.computed = {};
-    this.watchers = /* @__PURE__ */ new Map();
-    this.batchProcessing = false;
-    this.loops = /* @__PURE__ */ new Map();
-    this.events = /* @__PURE__ */ new Map();
-    this.middleware = new middleware_default();
-    this.autoSaveInterval = null;
     this.domDependencies = /* @__PURE__ */ new Map();
     this.virtualDom = /* @__PURE__ */ new Map();
-    for (const key in data) {
-      if (typeof data[key] === "function") {
-        this.computed[key] = {
-          getter: data[key],
-          value: null,
-          dependencies: []
-          // Буде заповнено під час першого виклику
-        };
-        delete data[key];
-      }
-    }
-    this.data = this.createReactiveProxy(data);
+    this.loops = /* @__PURE__ */ new Map();
   }
-  // Метод реєстрації залежності DOM від властивості
+  // Регистрация зависимости DOM от свойства
   registerDomDependency(propertyPath, domElement, info) {
     if (!this.domDependencies.has(propertyPath)) {
       this.domDependencies.set(propertyPath, /* @__PURE__ */ new Set());
@@ -570,25 +843,25 @@ var Model = class _Model extends event_emmiter_default {
       ...info
     });
   }
-  // Парсимо DOM для пошуку циклів
+  // Парсим DOM для поиска циклов (data-for)
   parseLoops(rootElement) {
-    _Model.debug("Looking for items with data-for...");
+    Logger.debug("Looking for items with data-for...");
     const loopElements = rootElement.querySelectorAll("[data-for]");
-    _Model.debug("Found items from data-for:", loopElements.length);
+    Logger.debug("Found items from data-for:", loopElements.length);
     loopElements.forEach((element, index) => {
       const expression = element.getAttribute("data-for").trim();
-      _Model.debug(`Element processing ${index}:`, expression);
+      Logger.debug(`Element processing ${index}:`, expression);
       const matches = expression.match(/^\s*(\w+)(?:\s*,\s*(\w+))?\s+in\s+(\w+(?:\.\w+)*)\s*$/);
       if (!matches) {
         console.error("Incorrect format of expression data-for:", expression);
         return;
       }
       const [_, itemName, indexName, arrayPath] = matches;
-      _Model.debug("The expression is dismantled:", { itemName, indexName, arrayPath });
-      const array = this.getValueByPath(arrayPath);
-      _Model.debug("An array was obtained:", array);
+      Logger.debug("The expression is dismantled:", { itemName, indexName, arrayPath });
+      const array = this.model.store.get(arrayPath);
+      Logger.debug("An array was obtained:", array);
       if (!Array.isArray(array)) {
-        _Model.error(`The value in the way ${arrayPath} is not an array:`, array);
+        Logger.error(`The value in the path ${arrayPath} is not an array:`, array);
         return;
       }
       const template = element.cloneNode(true);
@@ -599,22 +872,22 @@ var Model = class _Model extends event_emmiter_default {
         arrayPath,
         parentNode: element.parentNode
       });
-      _Model.debug("Update the loop for the item");
+      Logger.debug("Update the loop for the item");
       this.updateLoop(element);
     });
   }
-  // Оновлюємо цикл
+  // Обновляем цикл
   updateLoop(element) {
     const loopInfo = this.loops.get(element);
     if (!loopInfo) {
-      _Model.error("No loop information found for an item");
+      Logger.error("No loop information found for an item");
       return;
     }
     const { template, itemName, indexName, arrayPath, parentNode } = loopInfo;
-    const array = this.getValueByPath(arrayPath);
-    _Model.debug("Update loop for array:", array);
+    const array = this.model.store.get(arrayPath);
+    Logger.debug("Update loop for array:", array);
     if (!Array.isArray(array)) {
-      _Model.error("The value is not an array:", array);
+      Logger.error("The value is not an array:", array);
       return;
     }
     const generated = parentNode.querySelectorAll(`[data-generated-for="${arrayPath}"]`);
@@ -632,14 +905,14 @@ var Model = class _Model extends event_emmiter_default {
     });
     element.style.display = "none";
   }
-  // Обробка шаблонних вузлів
+  // Обработка шаблонных узлов
   processTemplateNode(node, context) {
     if (node.nodeType === Node.TEXT_NODE) {
       const originalText = node.textContent;
       const newText = node.textContent.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
         path = path.trim();
-        const value = context && path in context ? context[path] : this.getValueByPath(path);
-        _Model.debug("Replacement in the template:", { original: match, path, value });
+        const value = context && path in context ? context[path] : this.model.store.get(path);
+        Logger.debug("Replacement in the template:", { original: match, path, value });
         return value;
       });
       if (originalText !== newText) {
@@ -651,215 +924,7 @@ var Model = class _Model extends event_emmiter_default {
       });
     }
   }
-  // Пакетне оновлення: аргумент - функція або об'єкт
-  batch(callback) {
-    this.batchProcessing = true;
-    try {
-      if (typeof callback === "function") {
-        callback();
-      } else {
-        for (const [path, value] of Object.entries(callback)) {
-          this.setValueByPath(path, value);
-        }
-      }
-    } finally {
-      this.updateAllDOM();
-      this.batchProcessing = false;
-      this.emit("batchComplete");
-    }
-  }
-  // Метод для встановлення значення за шляхом
-  setValueByPath(path, value) {
-    _Model.debug("Setting value by path:", { path, value });
-    const parts = path.split(".");
-    let current = this.data;
-    for (let i = 0; i < parts.length - 1; i++) {
-      if (!(parts[i] in current)) {
-        current[parts[i]] = {};
-      }
-      current = current[parts[i]];
-    }
-    current[parts[parts.length - 1]] = value;
-  }
-  // Метод для отримання значення за шляхом
-  getValueByPath(path) {
-    _Model.debug("Obtaining value by way:", path);
-    let value = this.data;
-    if (!path) return value;
-    const parts = path.split(".");
-    for (const part of parts) {
-      if (value === void 0 || value === null) {
-        _Model.error(`The way ${path} broke off on ${part}`);
-        return void 0;
-      }
-      value = value[part];
-    }
-    _Model.debug("The value received:", value);
-    return value;
-  }
-  // Додаємо спостерігачів (watchers)
-  watch(propertyPath, callback) {
-    if (!this.watchers.has(propertyPath)) {
-      this.watchers.set(propertyPath, /* @__PURE__ */ new Set());
-    }
-    this.watchers.get(propertyPath).add(callback);
-  }
-  // Додаємо валідацію
-  addValidator(propertyPath, validator) {
-    if (!this.validators) {
-      this.validators = /* @__PURE__ */ new Map();
-    }
-    this.validators.set(propertyPath, validator);
-  }
-  // Додаємо форматування
-  addFormatter(propertyPath, formatter) {
-    if (!this.formatters) {
-      this.formatters = /* @__PURE__ */ new Map();
-    }
-    this.formatters.set(propertyPath, formatter);
-  }
-  // Додаємо middleware
-  use(middleware) {
-    this.middleware.use(middleware);
-  }
-  // Створення реактивного проксі для масиву
-  createArrayProxy(array, path = "") {
-    return new Proxy(array, {
-      get: (target, property) => {
-        _Model.debug("ArrayProxy get:", { path, property });
-        return target[property];
-      },
-      set: (target, property, value) => {
-        _Model.debug("ArrayProxy set:", { path, property, value });
-        if (typeof property === "symbol") {
-          target[property] = value;
-          return true;
-        }
-        target[property] = value;
-        this.loops.forEach((loopInfo, element) => {
-          if (loopInfo.arrayPath === path) {
-            this.updateLoop(element);
-          }
-        });
-        return true;
-      }
-    });
-  }
-  // Створення реактивного проксі
-  createReactiveProxy(obj, path = "") {
-    if (Array.isArray(obj)) {
-      return this.createArrayProxy(obj, path);
-    }
-    return new Proxy(obj, {
-      set: async (target, property, value) => {
-        if (typeof property === "symbol") {
-          target[property] = value;
-          return true;
-        }
-        if (this.validators?.has(`${path}.${property}`)) {
-          const isValid = this.validators.get(`${path}.${property}`)(value);
-          if (!isValid) return false;
-        }
-        if (this.formatters?.has(`${path}.${property}`)) {
-          value = this.formatters.get(`${path}.${property}`)(value);
-        }
-        if (value && typeof value === "object") {
-          value = this.createReactiveProxy(
-            value,
-            path ? `${path}.${property}` : property
-          );
-        }
-        const oldValue = target[property];
-        const context = {
-          property,
-          oldValue,
-          newValue: value,
-          preventDefault: false
-        };
-        await this.middleware.process(context);
-        if (context.preventDefault) {
-          return true;
-        }
-        target[property] = context.newValue;
-        this.emit("change", {
-          property,
-          oldValue,
-          newValue: context.newValue
-        });
-        const fullPath = path ? `${path}.${property}` : property;
-        if (this.watchers.has(fullPath)) {
-          this.watchers.get(fullPath).forEach(
-            (callback) => callback(value, oldValue)
-          );
-        }
-        if (!this.batchProcessing) {
-          this.updateDOM(fullPath, value);
-          this.updateInputs(fullPath, value);
-          this.updateComputedProperties(fullPath);
-        }
-        return true;
-      },
-      get: (target, property) => {
-        if (typeof property === "symbol") {
-          return target[property];
-        }
-        const fullPath = path ? `${path}.${property}` : property;
-        if (fullPath in this.computed) {
-          return this.evaluateComputed(fullPath);
-        }
-        const value = target[property];
-        if (value && typeof value === "object") {
-          return this.createReactiveProxy(
-            value,
-            fullPath
-          );
-        }
-        return value;
-      }
-    });
-  }
-  // Обчислення значення computed властивості
-  evaluateComputed(key, force = false) {
-    const computed = this.computed[key];
-    const dependencies = /* @__PURE__ */ new Set();
-    const dataTracker = new Proxy(this.data, {
-      get: (target, prop) => {
-        dependencies.add(prop);
-        let value = target[prop];
-        if (value && typeof value === "object") {
-          return new Proxy(value, {
-            get: (obj, nestedProp) => {
-              dependencies.add(`${prop}.${nestedProp}`);
-              return obj[nestedProp];
-            }
-          });
-        }
-        return value;
-      }
-    });
-    const result = computed.getter.call(dataTracker);
-    computed.dependencies = [...dependencies];
-    computed.value = result;
-    this.emit("compute", {
-      key,
-      value: result,
-      dependencies
-    });
-    return result;
-  }
-  // Оновлення обчислюваних властивостей при зміні залежностей
-  updateComputedProperties(changedProp) {
-    for (const key in this.computed) {
-      const computed = this.computed[key];
-      if (computed.dependencies.includes(changedProp)) {
-        console.log(`Updating computed property: ${key}`);
-        const newValue = this.evaluateComputed(key);
-        this.updateDOM(key, newValue);
-        this.updateInputs(key, newValue);
-      }
-    }
-  }
-  // Парсимо DOM для пошуку виразів {{ змінна }}
+  // Парсим DOM для поиска выражений {{ переменная }}
   parse(root) {
     const walker = document.createTreeWalker(
       root,
@@ -892,7 +957,7 @@ var Model = class _Model extends event_emmiter_default {
       const property = input.getAttribute("data-model");
       const handler = (e) => {
         const value = input.type === "checkbox" || input.type === "radio" ? e.target.checked : e.target.value;
-        this.setValueByPath(property, value);
+        this.model.store.set(property, value);
       };
       input.__modelInputHandler = handler;
       input.addEventListener("input", handler);
@@ -902,7 +967,7 @@ var Model = class _Model extends event_emmiter_default {
       });
     });
   }
-  // Встановлення значення в input-елемент
+  // Установка значения в input-элемент
   setInputValue(input, value) {
     if (input.type === "checkbox" || input.type === "radio") {
       input.checked = Boolean(value);
@@ -910,7 +975,7 @@ var Model = class _Model extends event_emmiter_default {
       input.value = value;
     }
   }
-  // Оновлення значень в input-елементах при зміні даних моделі
+  // Обновление значений в input-элементах при изменении данных модели
   updateInputs(propName, value) {
     this.inputs.forEach((item) => {
       if (item.property === propName) {
@@ -918,39 +983,73 @@ var Model = class _Model extends event_emmiter_default {
       }
     });
   }
-  // Оновлюємо элементи DOM, які того потребують
+  // Обновляем элементы DOM, которые нуждаются в этом
   updateAllDOM() {
     this.elements.forEach((element) => {
       let newContent = element.template;
       newContent = newContent.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
         path = path.trim();
-        return this.getValueByPath(path);
+        return this.model.store.get(path);
       });
       element.node.textContent = newContent;
     });
     this.inputs.forEach((item) => {
-      const value = this.getValueByPath(item.property);
+      const value = this.model.store.get(item.property);
       this.setInputValue(item.element, value);
     });
   }
-  // Оновлення DOM при зміні даних
+  // Обновление DOM при изменении данных
   updateDOM(propertyPath, value) {
-    if (!this.domDependencies.has(propertyPath)) return;
-    const affectedElements = this.domDependencies.get(propertyPath);
-    if (affectedElements.size === 0) return;
+    const isArrayMethodChange = value && typeof value === "object" && "method" in value;
+    if (isArrayMethodChange) {
+      propertyPath = value.path || propertyPath;
+    }
+    const elementsToUpdate = /* @__PURE__ */ new Set();
+    if (this.domDependencies.has(propertyPath)) {
+      this.domDependencies.get(propertyPath).forEach(
+        (dep) => elementsToUpdate.add(dep)
+      );
+    }
+    const pathParts = propertyPath.split(".");
+    let currentPath = "";
+    for (let i = 0; i < pathParts.length; i++) {
+      currentPath = currentPath ? `${currentPath}.${pathParts[i]}` : pathParts[i];
+      if (this.domDependencies.has(currentPath)) {
+        this.domDependencies.get(currentPath).forEach(
+          (dep) => elementsToUpdate.add(dep)
+        );
+      }
+    }
+    this.domDependencies.forEach((deps, path) => {
+      if (path.startsWith(`${propertyPath}.`) || path.startsWith(`${propertyPath}[`)) {
+        deps.forEach((dep) => elementsToUpdate.add(dep));
+      }
+    });
+    if (Array.isArray(value) || isArrayMethodChange) {
+      this.loops.forEach((loopInfo, element) => {
+        if (loopInfo.arrayPath === propertyPath) {
+          this.updateLoop(element);
+        }
+      });
+    }
+    if (elementsToUpdate.size === 0) return;
     const updates = {
       template: [],
       conditional: [],
-      loop: []
+      loop: [],
+      attribute: []
     };
-    affectedElements.forEach((dep) => {
-      updates[dep.type].push(dep);
+    elementsToUpdate.forEach((dep) => {
+      if (dep && dep.type) {
+        updates[dep.type].push(dep);
+      }
     });
     updates.template.forEach((dep) => this.updateTemplateNode(dep.element, dep.template));
     updates.conditional.forEach((dep) => this.updateConditional(dep.element, dep.expression));
     updates.loop.forEach((dep) => this.updateLoopPart(dep.element, dep.arrayPath, value, dep.index));
+    updates.attribute.forEach((dep) => this.updateAttribute(dep.element, dep.attribute, dep.expression));
   }
-  // Парсимо DOM для пошуку умовних виразів
+  // Парсим DOM для поиска условных выражений
   parseConditionals(rootElement) {
     const conditionalElements = rootElement.querySelectorAll("[data-if]");
     conditionalElements.forEach((element) => {
@@ -966,22 +1065,22 @@ var Model = class _Model extends event_emmiter_default {
       this.updateConditional(element, expression);
     });
   }
-  // Оновлення умовного виразу
+  // Обновление условного выражения
   updateConditional(element, expression) {
     const currentState = this.virtualDom.get(element);
-    const context = { ...this.data };
+    const context = { ...this.model.store.getState() };
     const result = this.evaluateExpression(expression, context);
     if (currentState !== result) {
       element.style.display = result ? element.__originalDisplay || "" : "none";
       this.virtualDom.set(element, result);
     }
   }
-  // Оновлення частини циклу
+  // Обновление части цикла
   updateLoopPart(element, arrayPath, changedValue, changedIndex) {
     const loopInfo = this.loops.get(element);
     if (!loopInfo) return;
     const { template, itemName, indexName, parentNode } = loopInfo;
-    const array = this.getValueByPath(arrayPath);
+    const array = this.model.store.get(arrayPath);
     if (!Array.isArray(array)) return;
     const generated = Array.from(
       parentNode.querySelectorAll(`[data-generated-for="${arrayPath}"]`)
@@ -1007,150 +1106,276 @@ var Model = class _Model extends event_emmiter_default {
       });
     }
   }
-  // Метод оновлення текстового шаблону
+  // Метод обновления текстового шаблона
   updateTemplateNode(node, template) {
     const newContent = template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
       path = path.trim();
-      return this.getValueByPath(path);
+      return this.model.store.get(path);
     });
     if (this.virtualDom.get(node) !== newContent) {
       node.textContent = newContent;
       this.virtualDom.set(node, newContent);
     }
   }
-  // Допоміжний метод перевірки доступності localStorage
-  static isStorageAvailable() {
-    try {
-      const test = "__test__";
-      localStorage.setItem(test, test);
-      localStorage.removeItem(test);
-      return true;
-    } catch (e) {
-      return false;
+  // Метод для обновления атрибута на основе выражения
+  updateAttribute(element, attributeName, expression) {
+    const context = { ...this.model.store.getState() };
+    let value;
+    if (expression.startsWith("{{") && expression.endsWith("}}")) {
+      const path = expression.substring(2, expression.length - 2).trim();
+      value = this.model.store.get(path);
+    } else {
+      value = this.evaluateExpression(expression, context);
     }
-  }
-  // Збереження стану
-  saveState() {
-    if (!_Model.isStorageAvailable()) {
-      console.warn("localStorage is not available");
-      this.emit("saveStateError", { error: new Error("localStorage is not available") });
-      return null;
-    }
-    const dataToSave = JSON.parse(JSON.stringify(this.data));
-    const state = {
-      data: dataToSave,
-      computed: Object.fromEntries(
-        Object.entries(this.computed).map(([key, comp]) => [key, comp.value])
-      ),
-      timestamp: Date.now()
-    };
-    try {
-      localStorage.setItem(this.options.id, JSON.stringify(state));
-      this.emit("saveState", state);
-      _Model.debug("State saved:", state);
-      return state;
-    } catch (error) {
-      _Model.error("Error saving state:", error);
-      this.emit("saveStateError", { error, state });
-      return null;
-    }
-  }
-  // Відновлення стану
-  loadState() {
-    if (!_Model.isStorageAvailable()) {
-      console.warn("localStorage is not available");
-      return null;
-    }
-    const savedState = localStorage.getItem(this.options.id);
-    if (savedState) {
-      const parsed = JSON.parse(savedState);
-      Object.assign(this.data, parsed.data);
-      if (parsed.computed) {
-        for (const key of Object.keys(this.computed)) {
-          this.computed[key].value = this.computed[key].getter.call(this.data);
-        }
+    const previousValue = element.getAttribute(attributeName);
+    if (String(value) !== previousValue) {
+      if (value === false || value === null || value === void 0) {
+        element.removeAttribute(attributeName);
+      } else if (value === true) {
+        element.setAttribute(attributeName, "");
+      } else {
+        element.setAttribute(attributeName, String(value));
       }
-      this.emit("loadState", {
-        data: parsed.data,
-        computed: this.getComputedValues()
-      });
     }
   }
-  loadStateFromSnapshot(snapshot) {
-    if (!snapshot) {
-      _Model.error("Snapshot is undefined or null");
-      return;
-    }
-    try {
-      const computed = {};
-      for (const key in snapshot) {
-        if (typeof snapshot[key] === "function") {
-          computed[key] = {
-            getter: snapshot[key],
-            value: null,
-            dependencies: []
-            // Будет заполнено при первом вызове
-          };
-        } else {
-          this.data[key] = snapshot[key];
+  // Парсим DOM для поиска атрибутов с привязками
+  parseAttributes(rootElement) {
+    const elements = rootElement.querySelectorAll("[data-bind]");
+    elements.forEach((element) => {
+      const bindingExpression = element.getAttribute("data-bind");
+      try {
+        const bindings = JSON.parse(bindingExpression.replace(/'/g, '"'));
+        for (const [attributeName, expression] of Object.entries(bindings)) {
+          const variables = this.extractVariables(expression);
+          variables.forEach((variable) => {
+            this.registerDomDependency(variable, element, {
+              type: "attribute",
+              attribute: attributeName,
+              expression
+            });
+          });
+          this.updateAttribute(element, attributeName, expression);
         }
+      } catch (error) {
+        Logger.error("An error of analysis of attachments:", error);
       }
-      this.emit("restoreState", {
-        timestamp: Date.now(),
-        snapshot
-      });
-      return true;
-    } catch (error) {
-      _Model.error("Error loading state from snapshot:", error);
-      this.emit("restoreStateError", {
-        error,
-        snapshot
-      });
-      return false;
-    }
+    });
   }
-  // Автоматичне збереження в localStorage
-  enableAutoSave(interval = 5e3) {
-    this.autoSaveInterval = setInterval(() => {
-      this.saveState();
-    }, interval);
-  }
-  // Вимкнення автоматичного збереження
-  disableAutoSave() {
-    clearInterval(this.autoSaveInterval);
-  }
-  // Допоміжний метод для отримання всіх обчислюваних значень
-  getComputedValues() {
-    return Object.fromEntries(
-      Object.entries(this.computed).map(([key, comp]) => [key, comp.value])
-    );
-  }
-  // Допоміжний метод для вилучення змінних з виразу
+  // Вспомогательный метод для извлечения переменных из выражения
   extractVariables(expression) {
     const matches = expression.match(/\b[a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*\b/g) || [];
     return [...new Set(matches)];
   }
-  // Метод для оцінки виразу
+  // Метод для оценки выражения
   evaluateExpression(expression, context) {
     try {
       const func = new Function(...Object.keys(context), `return ${expression}`);
       return func(...Object.values(context));
     } catch (error) {
-      _Model.error("Error when evaluating expression:", error);
+      Logger.error("Error when evaluating expression:", error);
       return false;
     }
+  }
+  // Проверяет, зависит ли путь pathB от пути pathA
+  isPathDependency(pathA, pathB) {
+    return pathB === pathA || pathB.startsWith(`${pathA}.`) || pathB.startsWith(`${pathA}[`);
+  }
+  // Находит все зависимые пути
+  getDependentPaths(path) {
+    const dependentPaths = [];
+    this.domDependencies.forEach((_, depPath) => {
+      if (this.isPathDependency(path, depPath)) {
+        dependentPaths.push(depPath);
+      }
+    });
+    return dependentPaths;
+  }
+  // Оптимизированный метод для обнаружения изменений в массивах
+  detectArrayChanges(newArray, oldArray = []) {
+    const changes = {
+      added: [],
+      removed: [],
+      moved: []
+    };
+    for (let i = 0; i < newArray.length; i++) {
+      const item = newArray[i];
+      const oldIndex = oldArray.findIndex(
+        (oldItem) => JSON.stringify(oldItem) === JSON.stringify(item)
+      );
+      if (oldIndex === -1) {
+        changes.added.push({ index: i, item });
+      } else if (oldIndex !== i) {
+        changes.moved.push({ oldIndex, newIndex: i, item });
+      }
+    }
+    for (let i = 0; i < oldArray.length; i++) {
+      const item = oldArray[i];
+      const newIndex = newArray.findIndex(
+        (newItem) => JSON.stringify(newItem) === JSON.stringify(item)
+      );
+      if (newIndex === -1) {
+        changes.removed.push({ index: i, item });
+      }
+    }
+    return changes;
+  }
+  bindDOM(rootElement) {
+    this.parseLoops(rootElement);
+    this.parseConditionals(rootElement);
+    this.parseAttributes(rootElement);
+    this.parse(rootElement);
+    this.updateAllDOM();
+  }
+  // Освобождение ресурсов
+  destroy() {
+    this.inputs.forEach(({ element }) => {
+      if (element.__modelInputHandler) {
+        element.removeEventListener("input", element.__modelInputHandler);
+        delete element.__modelInputHandler;
+      }
+    });
+    this.elements = [];
+    this.inputs = [];
+    this.domDependencies.clear();
+    this.virtualDom.clear();
+    this.loops.clear();
+  }
+};
+
+// src/reactive/computed.js
+var ComputedProps = class {
+  constructor(model, computed = {}) {
+    this.model = model;
+    this.computed = computed;
+    this.store = model.store;
+  }
+  // Добавьте этот метод для инициализации обчислюваемых свойств
+  init() {
+    for (const key in this.computed) {
+      this.evaluate(key);
+      Object.defineProperty(this.model.data, key, {
+        get: () => this.computed[key].value,
+        enumerable: true,
+        configurable: true
+      });
+    }
+  }
+  // Обчислення значення computed властивості
+  evaluate(key, force = false) {
+    const computed = this.computed[key];
+    const dependencies = /* @__PURE__ */ new Set();
+    const dataTracker = new Proxy(this.store.getState(), {
+      get: (target, prop) => {
+        dependencies.add(prop);
+        let value = target[prop];
+        if (value && typeof value === "object") {
+          return new Proxy(value, {
+            get: (obj, nestedProp) => {
+              dependencies.add(`${prop}.${nestedProp}`);
+              return obj[nestedProp];
+            }
+          });
+        }
+        return value;
+      }
+    });
+    const result = computed.getter.call(dataTracker);
+    computed.dependencies = [...dependencies];
+    computed.value = result;
+    this.store.emit("compute", {
+      key,
+      value: result,
+      dependencies
+    });
+    return result;
+  }
+  update(changedProp) {
+    for (const key in this.computed) {
+      const computed = this.computed[key];
+      const isDependency = computed.dependencies.some((dep) => {
+        if (dep === changedProp) return true;
+        if (changedProp.startsWith(dep + ".")) return true;
+        if (dep.startsWith(changedProp + ".")) return true;
+        return false;
+      });
+      if (isDependency) {
+        Logger.debug(`Updating computed property: ${key}`);
+        const newValue = this.evaluate(key);
+        this.model.dom.updateDOM(key, newValue);
+        this.model.dom.updateInputs(key, newValue);
+      }
+    }
+  }
+  // Допоміжний метод для отримання всіх обчислюваних значень
+  get() {
+    return Object.fromEntries(
+      Object.entries(this.computed).map(([key, comp]) => [key, comp.value])
+    );
+  }
+};
+
+// src/model.js
+var ModelOptions = {
+  id: "model",
+  memoizeComputed: true
+};
+var Model = class extends event_emitter_default {
+  constructor(data = {}, options = {}) {
+    Logger.DEBUG_LEVEL = Logger.DEBUG_LEVELS.DEBUG;
+    Logger.debug("Model initialization with data:", data);
+    super();
+    this.options = Object.assign({}, ModelOptions, options);
+    this.computed = {};
+    this.events = /* @__PURE__ */ new Map();
+    this.autoSaveInterval = null;
+    for (const key in data) {
+      if (typeof data[key] === "function") {
+        this.computed[key] = {
+          getter: data[key],
+          value: null,
+          dependencies: []
+          // Буде заповнено під час першого виклику
+        };
+        delete data[key];
+      }
+    }
+    this.dom = new DOMManager(this);
+    this.store = new ReactiveStore(data);
+    this.data = this.store.state;
+    this.computedProps = new ComputedProps(this, this.computed);
+    this.subscribe();
+    this.computedProps.init();
+  }
+  subscribe() {
+    this.store.on("change", (data) => {
+      this.dom.updateDOM(data.path, data.newValue);
+      this.dom.updateInputs(data.path, data.newValue);
+      this.computedProps.update(data.path);
+    });
+  }
+  // Додаємо валідацію
+  addValidator(path, validator) {
+    this.store.addValidator(path, validator);
+  }
+  // Додаємо форматування
+  addFormatter(path, formatter) {
+    this.store.addFormatter(path, formatter);
+  }
+  // Додаємо middleware
+  use(middleware) {
+    this.store.use(middleware);
+  }
+  watch(path, callback) {
+    this.store.watch(path, callback);
   }
   // Ініціюємо модель на відповідному DOM елементі
   init(selector) {
     const rootElement = typeof selector === "string" ? document.querySelector(selector) : selector;
     if (!rootElement) {
-      _Model.error("The root element was not found!");
+      Logger.error("The root element was not found!");
       return;
     }
-    this.parseLoops(rootElement);
-    this.parseConditionals(rootElement);
-    this.parse(rootElement);
-    this.updateAllDOM();
+    this.dom.bindDOM(rootElement);
     this.emit("init");
     return this;
   }
@@ -1162,9 +1387,9 @@ var Model = class _Model extends event_emmiter_default {
   // Пример использования:
   // model.applyArrayChanges('users', (users) => users.push({ name: 'Новый пользователь' }));
   applyArrayChanges(arrayPath, callback) {
-    const array = this.getValueByPath(arrayPath);
+    const array = this.store.get(arrayPath);
     if (!Array.isArray(array)) {
-      _Model.error(`The path ${arrayPath} is not an array!`);
+      Logger.error(`The path ${arrayPath} is not an array!`);
       return false;
     }
     this.batchProcessing = true;
@@ -1232,24 +1457,16 @@ var Model = class _Model extends event_emmiter_default {
   // Проверка существования пути в модели
   isValidPath(path) {
     try {
-      const value = this.getValueByPath(path);
+      const value = this.store.get(path);
       return value !== void 0;
     } catch (e) {
       return false;
     }
   }
   destroy() {
-    this.disableAutoSave();
-    this.inputs.forEach(({ element }) => {
-      element.removeEventListener("input", element.__modelInputHandler);
-    });
-    this.elements = [];
-    this.inputs = [];
-    this.domDependencies.clear();
-    this.virtualDom.clear();
-    this.watchers.clear();
-    this.loops.clear();
     this.events.clear();
+    this.dom.destroy();
+    this.store.destroy();
     this.emit("destroy");
   }
 };
@@ -1257,7 +1474,7 @@ var model_default = Model;
 
 // src/index.js
 var version = "0.11.0";
-var build_time = "02.03.2025, 20:43:45";
+var build_time = "03.03.2025, 08:22:35";
 model_default.info = () => {
   console.info(`%c Model %c v${version} %c ${build_time} `, "color: white; font-weight: bold; background: #0080fe", "color: white; background: darkgreen", "color: white; background: #0080fe;");
 };

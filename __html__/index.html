@@ -3,6 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <title>Title</title>
+    <style>
+        .positive {
+            color: green;
+        }
+        .negative {
+            color: red;
+        }
+    </style>
 </head>
 <body>
 <div id="root">
@@ -11,22 +19,23 @@
         Item: {{ item }}
     </div>
 
-<!--    <div>-->
-<!--        <p>Ім'я: {{ user.name }}-->
-<!--        <p>Місто: {{ user.address.city }}-->
-<!--        <p>Повна адреса: {{ fullAddress }}-->
-<!--    </div>-->
+    <div>
+        <p>Name: {{ user.name }}
+        <p>City: {{ user.address.city }}
+        <p>Country: {{ user.address.country }}
+        <p>Повна адреса: {{ fullAddress }}
+    </div>
 
-<!--    <div>-->
-<!--        <input type="text" data-model="user.name">-->
-<!--    </div>-->
+    <div>
+        <input type="text" data-model="user.name">
+    </div>
 
     <ul>
         <li data-for="item in user.items">{{ item }}</li>
     </ul>
     
-    <div>Counter: {{ counter }}</div>
-    <div><input class="text-center" type="text" data-model="counter"></div>
+    <div data-bind='{"class": "counter >= 0 ? \"positive\" : \"negative\""}'>Counter: {{ counter }}</div>
+    <div><input class="text-center" type="text" data-model="counter" /></div>
     <div>Статус: {{ status }}</div>
 
     <div data-if="counter > 0">Лічильник більший за нуль</div>

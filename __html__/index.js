@@ -1,5 +1,4 @@
 import Model from "../src/index.js";
-Model.DEBUG_LEVEL = Model.DEBUG_LEVELS.ERROR;
 Model.info()
 const app = new Model({
     counter: 0,
@@ -9,9 +8,16 @@ const app = new Model({
     items: ["Item 1", "Item 2", "Item 3"],
     user: {
         name: "John Doe",
+        address: {
+            city: "New York",
+            country: "USA"
+        },
         age: 30,
         items: ["Item 1", "Item 2", "Item 3"],
-    }
+    },
+    fullAddress: function(){
+        return `${this.user.address.city}, ${this.user.address.country}`;
+    },
 })
 
 app.init("#root")
@@ -21,12 +27,13 @@ globalThis.updateCounter = (operator) => {
 }
 
 globalThis.addItem = () => {
-    app.data.items.push(`Item ${app.data.items.length + 1}`)
+    // app.data.items.push(`Item ${app.data.items.length + 1}`)
+    app.store.applyArrayMethod('items', 'push', `Item ${app.data.items.length + 1}`);
 }
 
-app.initDevTools({
-    enabled: true,
-    timeTravel: true,
-    maxSnapshots: 50
-});
+// app.initDevTools({
+//     enabled: true,
+//     timeTravel: true,
+//     maxSnapshots: 50
+// });
 
