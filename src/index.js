@@ -1,4 +1,4 @@
-import Model from "./model.js";
+import Model from "./core/model.js";
 
 const version = "__VERSION__";
 const build_time = "__BUILD_TIME__";

@@ -3,36 +3,63 @@
 <head>
     <meta charset="UTF-8">
     <title>Title</title>
+    <style>
+        .positive {
+            color: green;
+        }
+        .negative {
+            color: red;
+        }
+    </style>
 </head>
 <body>
 <div id="root">
 <h1>Counter</h1>
+    <hr/>
+    <img :src="path_to_image" alt="Изображение">
+    <button :disabled="is_disabled">Кнопка</button>
+    <button onclick="enableButton()">Кнопка</button>
+    <hr/>
+    
     <div data-for="item in items">
         Item: {{ item }}
     </div>
 
-<!--    <div>-->
-<!--        <p>Ім'я: {{ user.name }}-->
-<!--        <p>Місто: {{ user.address.city }}-->
-<!--        <p>Повна адреса: {{ fullAddress }}-->
-<!--    </div>-->
+    <div>
+        <p>Name: {{ user.name }}
+        <p>City: {{ user.address.city }}
+        <p>Country: {{ user.address.country }}
+        <p>Повна адреса: {{ fullAddress }}
+    </div>
 
-<!--    <div>-->
-<!--        <input type="text" data-model="user.name">-->
-<!--    </div>-->
+    <hr/>
+    <ul>
+        <li data-in="key in data">
+            {{key}}: {{data[key]}}
+        </li>
+    </ul>
+    
+    <hr/>
+    <div>
+        <input type="text" data-model="user.name">
+    </div>
 
     <ul>
         <li data-for="item in user.items">{{ item }}</li>
     </ul>
     
-    <div>Counter: {{ counter }}</div>
-    <div><input class="text-center" type="text" data-model="counter"></div>
-    <div>Статус: {{ status }}</div>
+    <div data-bind='{"class": "counter >= 0 ? \"positive\" : \"negative\""}'>Counter: {{ counter }}</div>
+    <div><input class="text-center" type="text" data-model="counter" /></div>
+    <div class="{{ counter_class }}">Статус: {{ status }}</div>
 
     <div data-if="counter > 0">Лічильник більший за нуль</div>
     <div data-if="counter < 0">Лічильник менший за нуль</div>
     <div data-if="counter === 0">Лічильник дорівнює нулю</div>
-
+    <hr/>
+    <div data-if="counter > 0">Положительное число</div>
+    <div data-else-if="counter < 0">Отрицательное число</div>
+    <div data-else>Ноль</div>
+    <hr/>
     <div class="m-2 d-flex flex-row gap-2">
         <button onclick="updateCounter('+')">+</button>
         <button onclick="updateCounter('-')">-</button>
