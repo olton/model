@@ -1,7 +1,7 @@
 
 /*!
  * Model v0.11.0
- * Build: 02.03.2025, 20:43:45
+ * Build: 04.03.2025, 14:21:20
  * Copyright 2012-2025 by Serhii Pimenov
  * Licensed under MIT
  */
@@ -588,7 +588,7 @@ var Model = class _Model extends event_emmiter_default {
       const array = this.getValueByPath(arrayPath);
       _Model.debug("An array was obtained:", array);
       if (!Array.isArray(array)) {
-        _Model.error(`The value in the way ${arrayPath} is not an array:`, array);
+        _Model.error(`The value in the path ${arrayPath} is not an array:`, array);
         return;
       }
       const template = element.cloneNode(true);
@@ -1257,7 +1257,7 @@ var model_default = Model;
 
 // src/index.js
 var version = "0.11.0";
-var build_time = "02.03.2025, 20:43:45";
+var build_time = "04.03.2025, 14:21:20";
 model_default.info = () => {
   console.info(`%c Model %c v${version} %c ${build_time} `, "color: white; font-weight: bold; background: #0080fe", "color: white; background: darkgreen", "color: white; background: #0080fe;");
 };
