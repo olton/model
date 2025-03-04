@@ -15,6 +15,10 @@
 <body>
 <div id="root">
 <h1>Counter</h1>
+    <ul>
+        <li data-for="post in posts">{{ post.title }}</li>
+    </ul>
+    
     <hr/>
     <img :src="path_to_image" alt="Изображение">
     <button :disabled="is_disabled">Кнопка</button>

@@ -64,13 +64,28 @@ export default class DOMManager {
             const originalText = node.textContent;
             const newText = node.textContent.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
                 path = path.trim();
-                return context && path in context ? context[path] : this.model.store.get(path);
+
+                // Функція для отримання значення за шляхом
+                const getValueByPath = (obj, path) => {
+                    return path.split('.').reduce((value, key) => {
+                        return value ? value[key] : undefined;
+                    }, obj);
+                };
+
+                // Спочатку шукаємо в локальному контексті
+                let value = context ? getValueByPath(context, path) : undefined;
+
+                // Якщо не знайдено в контексті, шукаємо в глобальному сховищі
+                if (value === undefined) {
+                    value = this.model.store.get(path);
+                }
+
+                return value !== undefined ? value : '';
             });
             if (originalText !== newText) {
                 node.textContent = newText;
             }
         } else if (node.nodeType === Node.ELEMENT_NODE) {
-
             Array.from(node.childNodes).forEach(child => {
                 this.processTemplateNode(child, context);
             });
@@ -335,11 +350,9 @@ export default class DOMManager {
      *                                    for attribute bindings.
      */
     parseAttributeBindings(rootElement) {
-
         const allElements = rootElement.querySelectorAll('*');
 
         for (const element of allElements) {
-
             const attributes = element.attributes;
 
             for (let i = 0; i < attributes.length; i++) {

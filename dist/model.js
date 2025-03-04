@@ -1,7 +1,7 @@
 
 /*!
  * Model v0.13.0
- * Build: 04.03.2025, 14:22:11
+ * Build: 04.03.2025, 14:30:11
  * Copyright 2012-2025 by Serhii Pimenov
  * Licensed under MIT
  */
@@ -2180,7 +2180,16 @@ var DOMManager = class {
       const originalText = node.textContent;
       const newText = node.textContent.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
         path = path.trim();
-        return context && path in context ? context[path] : this.model.store.get(path);
+        const getValueByPath = (obj, path2) => {
+          return path2.split(".").reduce((value2, key) => {
+            return value2 ? value2[key] : void 0;
+          }, obj);
+        };
+        let value = context ? getValueByPath(context, path) : void 0;
+        if (value === void 0) {
+          value = this.model.store.get(path);
+        }
+        return value !== void 0 ? value : "";
       });
       if (originalText !== newText) {
         node.textContent = newText;
@@ -2622,6 +2631,7 @@ var ComputedProps = class {
     this.model = model;
     this.computed = computed;
     this.store = model.store;
+    this.asyncCache = /* @__PURE__ */ new Map();
   }
   /**
    * Sets up computed properties in the model.
@@ -2632,11 +2642,14 @@ var ComputedProps = class {
    *
    * @method init
    */
-  init() {
+  async init() {
     for (const key in this.computed) {
-      this.evaluate(key);
+      await this.evaluate(key);
       Object.defineProperty(this.model.data, key, {
-        get: () => this.computed[key].value,
+        get: () => {
+          const computed = this.computed[key];
+          return computed.isAsync ? this.asyncCache.get(key) : computed.value;
+        },
         enumerable: true,
         configurable: true
       });
@@ -2656,7 +2669,7 @@ var ComputedProps = class {
    * @returns {*} New computed value
    * @emits compute
    */
-  evaluate(key, force = false) {
+  async evaluate(key, force = false) {
     const computed = this.computed[key];
     const dependencies = /* @__PURE__ */ new Set();
     const dataTracker = new Proxy(this.store.getState(), {
@@ -2674,15 +2687,27 @@ var ComputedProps = class {
         return value;
       }
     });
-    const result = computed.getter.call(dataTracker);
-    computed.dependencies = [...dependencies];
-    computed.value = result;
-    this.store.emit("compute", {
-      key,
-      value: result,
-      dependencies
-    });
-    return result;
+    const isAsync = computed.getter.constructor.name === "AsyncFunction";
+    computed.isAsync = isAsync;
+    try {
+      const result = await computed.getter.call(dataTracker);
+      computed.dependencies = [...dependencies];
+      if (isAsync) {
+        this.asyncCache.set(key, result);
+      } else {
+        computed.value = result;
+      }
+      this.store.emit("compute", {
+        key,
+        value: result,
+        dependencies,
+        isAsync
+      });
+      return result;
+    } catch (error) {
+      console.error(`Error evaluating computed property "${key}":`, error);
+      throw error;
+    }
   }
   /**
    * Updates computed properties affected by model changes.
@@ -2695,7 +2720,8 @@ var ComputedProps = class {
    * @method update
    * @param {string} changedProp - Changed property path
    */
-  update(changedProp) {
+  async update(changedProp) {
+    const updatePromises = [];
     for (const key in this.computed) {
       const computed = this.computed[key];
       const isDependency = computed.dependencies.some((dep) => {
@@ -2705,11 +2731,15 @@ var ComputedProps = class {
         return false;
       });
       if (isDependency) {
-        const newValue = this.evaluate(key);
-        this.model.dom.updateDOM(key, newValue);
-        this.model.dom.updateInputs(key, newValue);
+        const updatePromise = (async () => {
+          const newValue = await this.evaluate(key);
+          this.model.dom.updateDOM(key, newValue);
+          this.model.dom.updateInputs(key, newValue);
+        })();
+        updatePromises.push(updatePromise);
       }
     }
+    await Promise.all(updatePromises);
   }
   /**
    * @method all
@@ -3065,7 +3095,7 @@ var model_default = Model;
 
 // src/index.js
 var version = "0.13.0";
-var build_time = "04.03.2025, 14:22:11";
+var build_time = "04.03.2025, 14:30:11";
 model_default.info = () => {
   console.info(`%c Model %c v${version} %c ${build_time} `, "color: white; font-weight: bold; background: #0080fe", "color: white; background: darkgreen", "color: white; background: #0080fe;");
 };

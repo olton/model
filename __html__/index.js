@@ -28,6 +28,10 @@ const app = new Model({
     is_disabled(){
         return this.counter <= 0;
     },
+    posts: [],
+    async _posts(){
+        this.posts = await fetch("https://jsonplaceholder.typicode.com/posts").then(res => res.json());
+    }
 })
 
 app.init("#root")

@@ -15,6 +15,7 @@ export default class ComputedProps {
         this.model = model;
         this.computed = computed;
         this.store = model.store;
+        this.asyncCache = new Map();
     }
 
     /**
@@ -26,12 +27,16 @@ export default class ComputedProps {
      *
      * @method init
      */
-    init() {
+    async init() {
         for (const key in this.computed) {
-            this.evaluate(key);
+            await this.evaluate(key);
 
             Object.defineProperty(this.model.data, key, {
-                get: () => this.computed[key].value,
+                get: () => {
+                    const computed = this.computed[key];
+                    // Повертаємо кешоване значення для асинхронних властивостей
+                    return computed.isAsync ? this.asyncCache.get(key) : computed.value;
+                },
                 enumerable: true,
                 configurable: true
             });
@@ -52,42 +57,54 @@ export default class ComputedProps {
      * @returns {*} New computed value
      * @emits compute
      */
-    evaluate(key, force = false) {
+    async evaluate(key, force = false) {
         const computed = this.computed[key];
-
         const dependencies = new Set();
+
         const dataTracker = new Proxy(this.store.getState(), {
             get: (target, prop) => {
-
                 dependencies.add(prop);
-
                 let value = target[prop];
 
                 if (value && typeof value === 'object') {
                     return new Proxy(value, {
                         get: (obj, nestedProp) => {
-
                             dependencies.add(`${prop}.${nestedProp}`);
                             return obj[nestedProp];
                         }
                     });
                 }
-
                 return value;
             }
         });
 
-        const result = computed.getter.call(dataTracker);
-        computed.dependencies = [...dependencies];
-        computed.value = result;
+        // Перевіряємо чи геттер є асинхронним
+        const isAsync = computed.getter.constructor.name === 'AsyncFunction';
+        computed.isAsync = isAsync;
 
-        this.store.emit('compute', {
-            key,
-            value: result,
-            dependencies,
-        });
+        try {
+            const result = await computed.getter.call(dataTracker);
+            computed.dependencies = [...dependencies];
 
-        return result;
+            if (isAsync) {
+                // Зберігаємо результат в кеш для асинхронних властивостей
+                this.asyncCache.set(key, result);
+            } else {
+                computed.value = result;
+            }
+
+            this.store.emit('compute', {
+                key,
+                value: result,
+                dependencies,
+                isAsync
+            });
+
+            return result;
+        } catch (error) {
+            console.error(`Error evaluating computed property "${key}":`, error);
+            throw error;
+        }
     }
 
     /**
@@ -101,28 +118,32 @@ export default class ComputedProps {
      * @method update
      * @param {string} changedProp - Changed property path
      */
-    update(changedProp) {
+    async update(changedProp) {
+        const updatePromises = [];
+
         for (const key in this.computed) {
             const computed = this.computed[key];
 
             const isDependency = computed.dependencies.some(dep => {
-
                 if (dep === changedProp) return true;
-
                 if (changedProp.startsWith(dep + '.')) return true;
-
                 if (dep.startsWith(changedProp + '.')) return true;
-
                 return false;
             });
 
             if (isDependency) {
-                const newValue = this.evaluate(key);
+                const updatePromise = (async () => {
+                    const newValue = await this.evaluate(key);
+                    this.model.dom.updateDOM(key, newValue);
+                    this.model.dom.updateInputs(key, newValue);
+                })();
 
-                this.model.dom.updateDOM(key, newValue);
-                this.model.dom.updateInputs(key, newValue);
+                updatePromises.push(updatePromise);
             }
         }
+
+        // Чекаємо завершення всіх оновлень
+        await Promise.all(updatePromises);
     }
 
     /**
