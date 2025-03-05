@@ -1,6 +1,6 @@
-import Model from "../src/index.js";
+import Model from "../dist/model.js";
+// import Model from "../src/index.js";
 
-Model.info()
 const app = new Model({
     counter: 0,
     status() {
@@ -28,10 +28,10 @@ const app = new Model({
     is_disabled(){
         return this.counter <= 0;
     },
-    posts: [],
-    async _posts(){
-        this.posts = await fetch("https://jsonplaceholder.typicode.com/posts").then(res => res.json());
-    }
+    // posts: [],
+    // async _posts(){
+    //     this.posts = await fetch("https://jsonplaceholder.typicode.com/posts").then(res => res.json());
+    // }
 }, {
     useSimpleExpressions: true
 })

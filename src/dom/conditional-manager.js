@@ -1,6 +1,9 @@
+import ExpressionManager from "../utils/expression-manager.js";
+import Logger from "../logger/logger.js";
+
 /**
  * Manages conditional rendering logic by interpreting custom attributes
- * (e.g., `data-if`, `data-else-if`, `data-else`) on DOM elements and updating their visibility.
+ * (for example, `data-if`, `data-else-if`, `data-else`) on DOM elements and updating their visibility.
  * Tracks dependencies between model paths and conditional groups to reactively update DOM when the model changes.
  *
  * @class ConditionalManager
@@ -18,15 +21,20 @@ export default class ConditionalManager {
      *
      * @constructor
      * @param {Object} dom - The root DOM element or DOM-related utilities.
-     * @param {Object} model - The data model containing state (e.g., `store` or `data`).
+     * @param {Object} model - The data model containing state (for example, `store` or `data`).
      */
     constructor(dom, model) {
+        Logger.DEBUG_LEVEL = model.options.debug ? 4 : 0;
+        Logger.debug("Init ConditionalManager")
+
         this.dom = dom;
         this.model = model;
         this.dependencies = new Map();
         this.conditionalGroups = [];
 
         this.subscribe();
+        
+        Logger.debug('Model: ConditionalManager initialized');
     }
 
     /**
@@ -40,6 +48,7 @@ export default class ConditionalManager {
      * @private
      */
     subscribe() {
+        Logger.debug('ConditionalManager: Subscribe to store changes');
         this.model.store.on('change', (data) => {
             const dependentGroups = this.getGroupsByPath(data.path);
             dependentGroups.forEach(group => {
@@ -98,13 +107,13 @@ export default class ConditionalManager {
 
     /**
      * Parses and creates a map of conditional elements (`data-if`, `data-else-if`, and `data-else`)
-     * within the given `rootElement`. Groups related conditional elements and attaches
+     * within the given `rootElement`. Groups related conditional elements and attach 
      * them to the `conditionalGroups` property for dynamic evaluation.
      *
      * This method identifies `data-if`, `data-else-if`, and `data-else` attributes in the DOM and
-     * ensures their relationships are correctly established (e.g., ensuring `data-else` elements have
+     * ensures their relationships are correctly established (for example, ensuring `data-else` elements have
      * preceding `data-if` or `data-else-if` elements). It also handles invalid sequences of attributes
-     * and logs warnings for cases where a `data-else` does not follow valid prerequisites.
+     * and logs warnings for cases where a `data-else` doesn't follow valid prerequisites.
      *
      * After parsing and grouping, conditional groups are evaluated, and their dependencies
      * are registered for reactive re-evaluation when relevant model paths change.
@@ -114,7 +123,7 @@ export default class ConditionalManager {
      * @public
      */
     parseConditionals(rootElement) {
-
+        Logger.debug('ConditionalManager: Parse conditionals (data-if, data-else-if, data-else)...');
         const nodes = rootElement.querySelectorAll('[data-if],[data-else-if],[data-else]');
 
         let currentGroup = [];
@@ -122,7 +131,7 @@ export default class ConditionalManager {
 
         nodes.forEach(node => {
             if (node.hasAttribute('data-if')) {
-
+                Logger.debug(`Found data-if in element:`, node);
                 if (currentGroup.length) {
                     groups.push(currentGroup);
                 }
@@ -132,7 +141,7 @@ export default class ConditionalManager {
                     expression: node.getAttribute('data-if')
                 }];
             } else if (node.hasAttribute('data-else-if')) {
-
+                Logger.debug(`Found data-else-if in element:`, node);
                 if (currentGroup.length && this.isAdjacentNode(currentGroup[currentGroup.length - 1].element, node)) {
                     currentGroup.push({
                         element: node,
@@ -140,7 +149,6 @@ export default class ConditionalManager {
                         expression: node.getAttribute('data-else-if')
                     });
                 } else {
-
                     if (currentGroup.length) {
                         groups.push(currentGroup);
                     }
@@ -151,7 +159,7 @@ export default class ConditionalManager {
                     }];
                 }
             } else if (node.hasAttribute('data-else')) {
-
+                Logger.debug(`Found data-else in element:`, node);
                 if (currentGroup.length && this.isAdjacentNode(currentGroup[currentGroup.length - 1].element, node)) {
                     currentGroup.push({
                         element: node,
@@ -162,8 +170,7 @@ export default class ConditionalManager {
                     groups.push(currentGroup);
                     currentGroup = [];
                 } else {
-
-                    console.warn('data-else без предшествующего data-if или data-else-if', node);
+                    console.warn('data-else without previous data-if or data-else-if', node);
                 }
             }
         });
@@ -191,7 +198,6 @@ export default class ConditionalManager {
      * @private
      */
     isAdjacentNode(node1, node2) {
-
         let current = node1.nextSibling;
         while (current) {
             if (current === node2) return true;
@@ -224,12 +230,11 @@ export default class ConditionalManager {
      *
      * @param {Array<Object>} group - An array representing a logical group of conditionals.
      * Each object in the array contains:
-     *    - {Element} element: The DOM element.
+     *    - {HTMLElement} element: The DOM element.
      *    - {string} type: The type of conditional ('if', 'else-if', 'else').
      *    - {string|null} expression: The conditional expression, null for 'else'.
      */
     updateConditionalGroup(group) {
-
         const context = this.model && this.model.store ?
             {...this.model.store.getState()} :
             this.model && this.model.data ? this.model.data : {};
@@ -239,7 +244,7 @@ export default class ConditionalManager {
         for (const item of group) {
             if (item.type === 'if' || item.type === 'else-if') {
 
-                const result = !conditionMet && this.evaluateExpression(item.expression, context);
+                const result = !conditionMet && ExpressionManager.evaluateExpression(item.expression, context);
 
                 if (result) {
 
@@ -267,22 +272,20 @@ export default class ConditionalManager {
      *
      * This functionality is used to implement conditional rendering in the DOM.
      *
-     * @param {Element} element - The DOM element to update.
+     * @param {HTMLElement} element - The DOM element to update.
      * @param {string} expression - The conditional expression to evaluate.
      * Nodes are expected to contain attributes like `data-if`, `data-else-if`, or `data-else`.
      */
     updateConditional(element, expression) {
-
         const group = this.findGroupForElement(element);
         if (group) {
             this.updateConditionalGroup(group);
         } else {
-
             const context = this.model && this.model.store ?
                 {...this.model.store.getState()} :
                 this.model && this.model.data ? this.model.data : {};
 
-            const result = this.evaluateExpression(expression, context);
+            const result = ExpressionManager.evaluateExpression(expression, context);
             element.style.display = result ? '' : 'none';
         }
     }
@@ -302,7 +305,6 @@ export default class ConditionalManager {
      *    - {string|null} expression: The conditional expression, null for 'else'.
      */
     findGroupForElement(element) {
-
         for (const group of this.conditionalGroups || []) {
             if (group.some(item => item.element === element)) {
                 return group;
@@ -335,7 +337,7 @@ export default class ConditionalManager {
                 return;
             }
 
-            const variables = this.extractVariables(expression);
+            const variables = ExpressionManager.extractVariables(expression);
 
             variables.forEach(variable => {
                 if (!this.dependencies.has(variable)) {
@@ -350,52 +352,13 @@ export default class ConditionalManager {
             });
         });
     }
-
-    /**
-     * Extracts variables from a given expression string.
-     *
-     * This method parses the expression and returns a list of variable names that are used
-     * in the expression. The variables are determined based on alphanumeric and underscore
-     * naming conventions, excluding JavaScript reserved keywords and primitive constants.
-     *
-     * @param {string} expression - The expression string to extract variables from.
-     * @returns {Array<string>} An array of unique variable names found in the expression.
-     * Variables are returned in their base form (i.e., the part before any dot notation or brackets).
-     */
-    extractVariables(expression) {
-        const variables = [];
-
-        // Удаляем строковые литералы, чтобы не извлекать переменные из них
-        const cleanExpr = expression
-            .replace(/'[^']*'/g, "''")
-            .replace(/"[^"]*"/g, '""');
-
-        // Находим потенциальные переменные
-        const matches = cleanExpr.match(/[a-zA-Z_][a-zA-Z0-9_]*(\.([a-zA-Z_][a-zA-Z0-9_]*))*(\[\d+\])*/g);
-
-        if (matches) {
-            matches.forEach(match => {
-                // Извлекаем базовое имя переменной (до точки или скобки)
-                const baseName = match.split('.')[0].split('[')[0].trim();
-
-                // Проверяем, что это не JavaScript ключевое слово или литерал
-                if (!['true', 'false', 'null', 'undefined'].includes(baseName)) {
-                    if (!variables.includes(baseName)) {
-                        variables.push(baseName);
-                    }
-                }
-            });
-        }
-
-        return variables;
-    }
-
+    
     /**
      * Retrieves all dependencies related to a specific path.
      *
-     * This method scans through the dependencies map and collects all elements and their details
+     * This method scans through the dependency map and collects all elements and their details
      * that are associated with the given path. It also includes dependencies that match the base
-     * path and/or any sub-paths (e.g., 'path' and 'path.sub').
+     * path and/or any sub-paths (for example, 'path' and 'path.sub').
      *
      * @param {string} path - The path of the dependency to look for.
      * @returns {Array<Object>} An array of dependency objects containing:
@@ -414,148 +377,7 @@ export default class ConditionalManager {
 
         return result;
     }
-
-    /**
-     * Evaluates a given expression within a specific context.
-     *
-     * This method can handle three types of input:
-     * 1. Expressions wrapped in double curly braces (`{{ }}`) are treated as
-     *    context paths and their values are retrieved using the `getValueFromContext` method.
-     * 2. Ternary, logical, and comparison operations within the expression
-     *    are parsed and evaluated using the `parseExpression` method.
-     * 3. Literal or primitive values (e.g., numbers, strings, booleans) are directly returned.
-     *
-     * Any parsing or evaluation errors are caught and logged.
-     *
-     * @param {string} expression - The expression to evaluate.
-     * @param {Object} context - The object representing the evaluation context.
-     * @returns {*} The result of evaluating the expression. Returns `false` if an error occurs.
-     */
-    evaluateExpression(expression, context) {
-        try {
-
-            if (expression.startsWith('{{') && expression.endsWith('}}')) {
-                const path = expression.substring(2, expression.length - 2).trim();
-                return this.getValueFromContext(context, path);
-            }
-
-            return this.parseExpression(expression, context);
-        } catch (error) {
-            console.error('Ошибка при вычислении выражения:', error);
-            return false;
-        }
-    }
-
-    /**
-     * Retrieves a value from a given context object based on a dot-separated path.
-     *
-     * This method allows accessing nested properties or array elements from an object
-     * using a path string. If a part of the path references an array, you can include
-     * an array index (e.g., 'path.toArray[0]'). If the path is invalid or the property
-     * doesn't exist, the method will return undefined.
-     *
-     * @param {Object} obj - The context object to retrieve values from.
-     * @param {string} path - The dot-separated string representing the path to the value.
-     * @returns {*} The value located at the specified path, or undefined if not found.
-     */
-    getValueFromContext(obj, path) {
-        if (!path) return obj;
-
-        return path.split('.').reduce((acc, part) => {
-            const arrayMatch = part.match(/^([^\[]+)(?:\[(\d+)\])?$/);
-            if (arrayMatch) {
-                const [_, propName, arrayIndex] = arrayMatch;
-                const propValue = acc?.[propName];
-                return arrayIndex !== undefined && Array.isArray(propValue) ?
-                    propValue[parseInt(arrayIndex, 10)] : propValue;
-            }
-            return acc?.[part];
-        }, obj);
-    }
-
-    /**
-     * Parses and evaluates a given expression within a provided context.
-     *
-     * This method handles several types of expressions, including:
-     * 1. Ternary expressions (`condition ? trueValue : falseValue`).
-     * 2. Logical expressions with `&&` (AND) and `||` (OR).
-     * 3. Comparison expressions (e.g., `===`, `!==`, `>`, `<`, `>=`, `<=`).
-     * 4. String literals inside single or double quotes.
-     * 5. Numeric literals (integers and floats).
-     * 6. Boolean literals (`true`, `false`), and `null`, `undefined`.
-     * 7. Context-based values, retrieved using the `getValueFromContext` method if the expression
-     *    is not a primitive value or an operation.
-     *
-     * The method uses recursion to parse and evaluate nested expressions.
-     *
-     * @param {string} expression - The expression to parse and evaluate.
-     * @param {Object} context - The object providing the evaluation context.
-     * @returns {*} The evaluated result of the expression, or `undefined` if the path does not exist in the context.
-     */
-    parseExpression(expression, context) {
-        expression = expression.trim();
-
-        const ternaryMatch = expression.match(/(.+?)\s*\?\s*(.+?)\s*:\s*(.+)/);
-        if (ternaryMatch) {
-            const [_, condition, trueExpr, falseExpr] = ternaryMatch;
-            return this.parseExpression(condition, context)
-                ? this.parseExpression(trueExpr, context)
-                : this.parseExpression(falseExpr, context);
-        }
-
-        if (expression.includes('&&')) {
-            const parts = expression.split('&&');
-            return parts.every(part => this.parseExpression(part.trim(), context));
-        }
-
-        if (expression.includes('||')) {
-            const parts = expression.split('||');
-            return parts.some(part => this.parseExpression(part.trim(), context));
-        }
-
-        const comparisonMatch = expression.match(/(.+?)\s*(===|==|!==|!=|>=|<=|>|<)\s*(.+)/);
-        if (comparisonMatch) {
-            const [_, left, operator, right] = comparisonMatch;
-            const leftValue = this.parseExpression(left.trim(), context);
-            const rightValue = this.parseExpression(right.trim(), context);
-
-            switch (operator) {
-                case '==':
-                    return leftValue == rightValue;
-                case '===':
-                    return leftValue === rightValue;
-                case '!=':
-                    return leftValue != rightValue;
-                case '!==':
-                    return leftValue !== rightValue;
-                case '>':
-                    return leftValue > rightValue;
-                case '<':
-                    return leftValue < rightValue;
-                case '>=':
-                    return leftValue >= rightValue;
-                case '<=':
-                    return leftValue <= rightValue;
-            }
-        }
-
-        if ((expression.startsWith("'") && expression.endsWith("'")) ||
-            (expression.startsWith('"') && expression.endsWith('"'))) {
-            return expression.substring(1, expression.length - 1);
-        }
-
-        if (/^-?\d+(\.\d+)?$/.test(expression)) {
-            return parseFloat(expression);
-        }
-
-        if (expression === 'true') return true;
-        if (expression === 'false') return false;
-        if (expression === 'null') return null;
-        if (expression === 'undefined') return undefined;
-
-        return this.getValueFromContext(context, expression);
-    }
-
+    
     /**
      * Cleans up the instance by clearing dependencies and resetting conditional groups.
      *

@@ -1,5 +1,6 @@
 import EventEmitter from '../event-emitter/event-emitter.js';
 import MiddlewareManager from "../middleware/middleware.js";
+import Logger from "../logger/logger.js";
 
 /**
  * Reactive state management store with:
@@ -22,18 +23,26 @@ export default class ReactiveStore extends EventEmitter {
      * - Initializes middleware system for state updates
      *
      * @param {Object} [initialState={}] - Initial store state
+     * @param model
      * @property {Proxy} state - Reactive state object
      * @property {Map} watchers - Property change observers
      * @property {Object} previousState - Last known state
      * @property {MiddlewareManager} middleware - State update pipeline
      */
-    constructor(initialState = {}) {
+    constructor(initialState = {}, model) {
         super();
+
+        this.model = model;
+        
+        Logger.DEBUG_LEVEL = this.model.options.debug ? 4 : 0;
+        Logger.debug('Model: Init ReactiveStore');
 
         this.state = this.createReactiveProxy(initialState);
         this.watchers = new Map();
         this.previousState = JSON.parse(JSON.stringify(initialState));
         this.middleware = new MiddlewareManager();
+
+        Logger.debug('Model: ReactiveStore initialized');
     }
 
     /**

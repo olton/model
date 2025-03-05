@@ -1,3 +1,5 @@
+import Logger from "../logger/logger.js";
+
 /**
  * Manages computed properties in a reactive model system.
  * - Initializes computed property getters
@@ -12,10 +14,27 @@
  */
 export default class ComputedProps {
     constructor(model, computed = {}) {
+        Logger.DEBUG_LEVEL = model.options.debug ? 4 : 0;
+        Logger.debug('Model: Init ComputedProps:', computed);
+
         this.model = model;
         this.computed = computed;
         this.store = model.store;
         this.asyncCache = new Map();
+
+        this.init().then(()=>{
+            Object.getOwnPropertyNames(this.computed).forEach(prop => {
+                if (typeof this.computed[prop]['getter'] === 'function') {
+                    try {
+                        const value = this.computed[prop]['getter'].call(this.store.getState());
+                        Logger.debug(`Initializing computed property ${prop}:`, value);
+                    } catch (e) {
+                        console.error(`Error initializing computed property ${prop}:`, e);
+                    }
+                }
+            });
+            Logger.debug('Model: ComputedProps initialized');
+        });
     }
 
     /**
@@ -28,19 +47,37 @@ export default class ComputedProps {
      * @method init
      */
     async init() {
+        const initPromises = [];
+
         for (const key in this.computed) {
-            await this.evaluate(key);
+            const valuePromise = this.evaluate(key);
+            initPromises.push(valuePromise);
 
             Object.defineProperty(this.model.data, key, {
                 get: () => {
                     const computed = this.computed[key];
-                    // Повертаємо кешоване значення для асинхронних властивостей
                     return computed.isAsync ? this.asyncCache.get(key) : computed.value;
                 },
                 enumerable: true,
                 configurable: true
             });
         }
+
+        // Дождитесь завершения всех вычислений
+        await Promise.all(initPromises);
+
+        // Обновите DOM для каждого свойства
+        for (const key in this.computed) {
+            const value = this.computed[key].isAsync
+                ? this.asyncCache.get(key)
+                : this.computed[key].value;
+
+            // Явно обновляем DOM для каждого свойства
+            this.model.dom.updateDOM(key, value);
+            this.model.dom.updateInputs(key, value);
+        }
+
+        return true;
     }
 
     /**

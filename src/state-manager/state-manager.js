@@ -1,4 +1,5 @@
 import EventEmitter from "../event-emitter/event-emitter.js";
+import Logger from "../logger/logger.js";
 
 /**
  * A utility class for managing application state with localStorage support.
@@ -17,9 +18,14 @@ export default class StateManager extends EventEmitter {
      * @param {string} [options.id="model"] - Unique identifier for the state in localStorage.
      */
     constructor(store, options = {}) {
+        Logger.DEBUG_LEVEL = store.model.options.debug ? 4 : 0;
+        Logger.debug('Model: Init StateManager:', options);
+
         super();
         this.store = store;
         this.options = Object.assign({id: "model"}, options);
+        
+        Logger.debug('Model: StateManager initialized');
     }
 
     /**

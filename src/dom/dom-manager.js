@@ -2,6 +2,7 @@ import LoopManager from "./loop-manager.js";
 import ConditionalManager from "./conditional-manager.js";
 import AttributeManager from "./attribute-manager.js";
 import EventManager from "./event-manager.js";
+import Logger from "../logger/logger.js";
 
 /**
  * The DOMManager class handles interactions with the DOM, including the registration of DOM dependencies,
@@ -19,6 +20,9 @@ export default class DOMManager {
      *                         It is used for data binding and template rendering in the DOM.
      */
     constructor(model) {
+        Logger.DEBUG_LEVEL = model.options.debug ? 4 : 0;
+        Logger.debug('Model: Init DOMManager');
+
         this.model = model;
         this.elements = [];
         this.inputs = [];
@@ -29,6 +33,8 @@ export default class DOMManager {
         this.conditionalManager = new ConditionalManager(this, model);
         this.attributeManager = new AttributeManager(this, model);
         this.eventManager = new EventManager(this, model);
+        
+        Logger.debug('Model: DOMManager initialized');
     }
 
     /**
@@ -205,7 +211,6 @@ export default class DOMManager {
      * Ensures that the UI remains synchronized with the underlying model.
      */
     updateAllDOM() {
-
         this.elements.forEach(element => {
             let newContent = element.template;
             newContent = newContent.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {

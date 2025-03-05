@@ -12,7 +12,8 @@ import Logger from "../logger/logger.js";
  */
 const ModelOptions = {
     id: "model", 
-    useSimpleExpressions: false,
+    useSimpleExpressions: true,
+    debug: false,
 }
 
 /**
@@ -34,13 +35,19 @@ class Model extends EventEmitter {
     constructor(data = {}, options = {}) {
         super();
 
-        // this.events = []
         this.options = Object.assign({}, ModelOptions, options);
+
+        Logger.DEBUG_LEVEL = this.options.debug ? 4 : 0;
+        Logger.debug('Model: Creating a model with data:', data);
+        Logger.debug('Model: Configuration options:', options);
+        
+        // this.events = []
         this.computed = {};
 
         // We register the calculated properties
         for (const key in data) {
             if (typeof data[key] === 'function') {
+                Logger.debug(`Model: Registration calculated property "${key}"`);
                 this.computed[key] = {
                     getter: data[key], 
                     value: null, 
@@ -49,15 +56,16 @@ class Model extends EventEmitter {
                 delete data[key];
             }
         }
-        
-        this.store = new ReactiveStore(data);
+
+        this.store = new ReactiveStore(data, this);
         this.data = this.store.state;
         this.dom = new DOMManager(this);
         this.computedProps = new ComputedProps(this, this.computed);
         this.stateManager = new StateManager(this.store);
 
         this.subscribe();
-        this.computedProps.init().then(()=>{});
+
+        Logger.debug('Model: The model was created successfully!');
     }
 
     /**
@@ -65,6 +73,8 @@ class Model extends EventEmitter {
      * input field updates, and computed properties recalculation.
      */
     subscribe() {
+        Logger.debug('Model: Subscribing to store changes');
+        
         this.store.on("change", (data) => {
             this.dom.updateDOM(data.path, data.newValue);
             this.dom.updateInputs(data.path, data.newValue);
@@ -75,7 +85,8 @@ class Model extends EventEmitter {
         this.store.on("compute", (data) => this.emit("compute", data))
         this.store.on("arrayChange", (data) => this.emit("arrayChange", data))
         this.store.on("batchComplete", (data) => this.emit("batchComplete", data))
-        
+
+        Logger.debug('Model: Subscribing to state manager events');
         this.stateManager.on("saveState", (data) => this.emit("saveState", data))
         this.stateManager.on("saveStateError", (error) => this.emit("saveStateError", error))
         this.stateManager.on("restoreState", (data) => this.emit("restoreState", data))
@@ -245,17 +256,22 @@ class Model extends EventEmitter {
      * @returns {Model|undefined} - Returns the model instance, or undefined if the root element is not found.
      */
     init(selector) {
-        const rootElement = typeof selector === 'string' ? document.querySelector(selector) : selector;
+        Logger.debug('Model: Initializing DOM bindings');
+        
+        let rootElement = typeof selector === 'string' ? document.querySelector(selector) : selector;
 
         if (!rootElement) {
-            console.error('The root element was not found!');
-            return;
+            rootElement = document.body
         }
 
+        Logger.debug(`Model: Model initialized in ${selector ?? 'body'}`);
+
+        Logger.debug('Model: Binding DOM');
         this.dom.bindDOM(rootElement);
 
         this.emit('init');
 
+        Logger.debug('Model: Initialization complete!');
         return this;
     }
 

@@ -61,7 +61,7 @@
     
     <div data-bind='{"class": "counter >= 0 ? \"positive\" : \"negative\""}'>Counter: {{ counter }}</div>
     <div><input class="text-center" type="text" data-model="counter" /></div>
-    <div class="{{ counter_class }}">Статус: {{ status }}</div>
+    <div>Статус (computed): {{ status }}</div>
 
     <div data-if="counter > 0">Лічильник більший за нуль</div>
     <div data-if="counter < 0">Лічильник менший за нуль</div>

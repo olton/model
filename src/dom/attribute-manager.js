@@ -1,4 +1,6 @@
-import {evaluateExpression, extractVariables} from "../utils/expression.js";
+// import {evaluateExpression, extractVariables} from "../utils/expression.js";
+import ExpressionManager from "../utils/expression-manager.js";
+import Logger from "../logger/logger.js";
 
 /**
  * @class AttributeManager
@@ -23,6 +25,9 @@ export default class AttributeManager {
     constructor(dom, model) {
         this.domManager = dom;
         this.model = model;
+        
+        Logger.DEBUG_LEVEL = this.model.options.debug ? 4 : 0;
+        Logger.debug("Init AttributeManager")
     }
 
     /**
@@ -37,9 +42,12 @@ export default class AttributeManager {
      * @throws {Error} When binding expression parsing fails
      */
     parseAttributesBind(rootElement) {
+        Logger.debug("Parsing attributes bind with data-bind...")
         const elements = rootElement.querySelectorAll('[data-bind]');
-
+        Logger.debug("Found elements with data-bind:", elements.length)
+        
         elements.forEach(element => {
+            Logger.debug("Parsing element with data-bind:", element)
             const bindingExpression = element.getAttribute('data-bind');
 
             try {
@@ -47,8 +55,9 @@ export default class AttributeManager {
 
                 for (const [attributeName, expression] of Object.entries(bindings)) {
 
-                    const variables = extractVariables(expression);
+                    const variables = ExpressionManager.extractVariables(expression);
 
+                    Logger.debug(`Found variables for ${attributeName}:`, variables)
 
                     variables.forEach(variable => {
                         this.domManager.registerDomDependency(variable, element, {
@@ -57,7 +66,6 @@ export default class AttributeManager {
                             expression: expression
                         });
                     });
-
 
                     this.updateAttributes(element, attributeName, expression);
                 }
@@ -96,13 +104,12 @@ export default class AttributeManager {
             value = this.model.store.get(path);
         } else {
 
-            value = evaluateExpression(expression, context);
+            value = ExpressionManager.evaluateExpression(expression, context);
         }
 
         const previousValue = element.getAttribute(attributeName);
         
         if (String(value) !== previousValue) {
-            
             if (value === false || value === null || value === undefined) {
                 element.removeAttribute(attributeName);
             } else if (value === true) {
@@ -110,6 +117,7 @@ export default class AttributeManager {
             } else {
                 element.setAttribute(attributeName, String(value));
             }
+            Logger.debug(`Updated attribute ${attributeName} with value:`, value)
         }
     }
 
@@ -129,6 +137,8 @@ export default class AttributeManager {
      *                                    for attribute bindings.
      */
     parseAttributes(rootElement) {
+        Logger.debug("Parsing attributes with colon...")
+        
         const allElements = rootElement.querySelectorAll('*');
 
         for (const element of allElements) {
@@ -138,6 +148,7 @@ export default class AttributeManager {
                 const attr = attributes[i];
 
                 if (attr.name.startsWith(':')) {
+                    Logger.debug(`Found attribute:`, attr)
 
                     const realAttrName = attr.name.substring(1);
 
@@ -180,6 +191,8 @@ export default class AttributeManager {
             return;
         }
 
+        Logger.debug(`Updating attribute ${attribute} with ${value}`)
+        
         if (attribute === 'class') {
             element.className = value;
         } else if (attribute === 'disabled' ||
@@ -198,6 +211,9 @@ export default class AttributeManager {
     }
     
     update(element, attribute, expression){
+        Logger.debug(`Updating element:`, element)
+        Logger.debug(`\t Attribute: ${attribute} for:`, expression)
+        
         this.updateAttributes(element, attribute, expression);
         this.updateElementAttribute(element, attribute, expression)
     }
