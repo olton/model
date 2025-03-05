@@ -215,7 +215,7 @@ class Model extends EventEmitter {
 
         for (const dep of computed.dependencies) {
             if (dep in this.computed) {
-                const cyclePath = this.checkCyclicDependencies(dep, new Set(visited), [...path]);
+                const cyclePath = this._checkCyclicDependencies(dep, new Set(visited), [...path]);
                 if (cyclePath) {
                     return cyclePath;
                 }
@@ -225,6 +225,15 @@ class Model extends EventEmitter {
         return null;
     }
 
+    /**
+     * Validates a given path to check if it exists in the model's store.
+     * @param path
+     * @returns {boolean}
+     */
+    validatePath(path){
+        return this.store.isValidPath(path);
+    }
+    
     /**
      * Initializes the DOM bindings for the model.
      * @param {string|HTMLElement} selector - Selector or root element to bind on.
