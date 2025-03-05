@@ -1,3 +1,5 @@
+import Logger from "../logger/logger.js";
+
 /**
  * Manages dynamic loop rendering in the DOM based on data bindings.
  * - Handles array iteration with data-for attribute
@@ -20,10 +22,15 @@ export default class LoopManager {
      * @property {Array} loopsIn - Stores object loop configurations and elements
      */
     constructor(domManager, model) {
+        Logger.DEBUG_LEVEL = model.options.debug ? 4 : 0;
+        Logger.debug('Model: Init LoopManager');
+
         this.domManager = domManager;
         this.model = model;
         this.loops = new Map();
         this.loopsIn = []
+        
+        Logger.debug('Model: LoopManager initialized');
     }
 
     /**
@@ -46,8 +53,12 @@ export default class LoopManager {
      * @throws {Error} Logs error for invalid loop expressions
      */
     parseLoops(rootElement) {
+        Logger.debug("Parsing loops with data-for...")
+        
         const loopElements = rootElement.querySelectorAll('[data-for]');
 
+        Logger.debug("Found elements with data-for:", loopElements.length)
+        
         loopElements.forEach((element) => {
             const expression = element.getAttribute('data-for').trim();
             const matches = expression.match(/^\s*(\w+)(?:\s*,\s*(\w+))?\s+in\s+(\w+(?:\.\w+)*)\s*$/);
@@ -83,7 +94,12 @@ export default class LoopManager {
             this.updateLoop(element);
         });
 
+        Logger.debug("Parsing loops with data-in...")
+        
         const inLoops = rootElement.querySelectorAll('[data-in]');
+        
+        Logger.debug("Found elements with data-in:", inLoops.length)
+        
         inLoops.forEach(element => {
             const attributeValue = element.getAttribute('data-in');
             const match = attributeValue.match(/^\s*(\w+)\s+in\s+(\S+)\s*$/);
@@ -139,6 +155,7 @@ export default class LoopManager {
         }
 
         Object.keys(objectData).forEach(key => {
+            Logger.debug(`Updating loop for key: ${key}`);
             const newElement = loop.originalElement.cloneNode(true);
             newElement.removeAttribute('data-in');
             newElement.style.display = '';
@@ -171,6 +188,11 @@ export default class LoopManager {
      * @returns {string} - The processed template string with placeholders replaced by their respective values.
      */
     processTemplate(template, objectData, key, itemContext) {
+        Logger.debug("Processing template:", template)
+        Logger.debug("\t With data:", objectData)
+        Logger.debug(`\t For key: ${key}`)
+        Logger.debug(`\t With context:`, itemContext)
+        
         return template.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
             path = path.trim();
             const keyVar = Object.keys(itemContext)[0];
@@ -179,6 +201,8 @@ export default class LoopManager {
                 return key;
             }
 
+            Logger.debug(`Template: Processing path: ${path}`)
+            
             const bracketRegex = new RegExp(`(\\w+)\\[${keyVar}\\]`);
             const bracketMatch = path.match(bracketRegex);
 
@@ -212,12 +236,16 @@ export default class LoopManager {
      */
     updateLoops(path, value) {
 
+        Logger.debug("Updating data-for loops for ${path}", this.loops)
+        
         this.loops.forEach((loopInfo, element) => {
             if (loopInfo.arrayPath === path) {
                 this.updateLoop(element);
             }
         });
 
+        Logger.debug(`Updating data-in loops for ${path}`, this.loopsIn)
+        
         this.loopsIn.forEach(loop => {
             if (loop.type === 'in' && (loop.objectPath === path || path.startsWith(loop.objectPath + '.'))) {
                 const objectData = this.model.store.get(loop.objectPath);
@@ -229,17 +257,12 @@ export default class LoopManager {
     }
 
     /**
-     * Updates the loops and maintains synchronization of the DOM elements
-     * based on changes in the store data. Handles both 'data-for' (array-based)
-     * and 'data-in' (object-based) loops.
-     *
-     * - For 'data-for' loops: Refreshes the associated elements when the array changes.
-     * - For 'data-in' loops: Synchronizes the DOM with the changes in the object.
-     *
-     * @param {string} path - Path of the changed data in the store.
-     * @param {*} value - New value of the updated data.
+     * Updates the entire loop for a given element.
+     * @param element
      */
     updateLoop(element) {
+        Logger.debug("Updating loop for element:", element)
+        
         const loopInfo = this.loops.get(element) || this.loopsIn.find(loop => loop.originalElement === element)[0];
 
         if (!loopInfo) {
@@ -263,13 +286,16 @@ export default class LoopManager {
             newNode.style.display = '';
             newNode.removeAttribute('data-for');
             newNode.setAttribute('data-generated-for', arrayPath);
-            newNode.setAttribute('data-item-index', index);
+            newNode.setAttribute('data-item-index', ""+index);
 
+            Logger.debug(`Creating new loop element for ${arrayPath} at index ${index}`)
+            
             this.domManager.processTemplateNode(newNode, {
                 [itemName]: item,
                 [indexName || 'index']: index
             });
 
+            Logger.debug(`Insert new node`, newNode)
             parentNode.insertBefore(newNode, element);
         });
 
@@ -351,5 +377,7 @@ export default class LoopManager {
     destroy() {
         this.loops.clear();
         this.loopsIn = [];
+        
+        Logger.debug('Model: LoopManager destroyed');
     }
 }

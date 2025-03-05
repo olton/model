@@ -1,3 +1,5 @@
+import Logger from "../logger/logger.js";
+
 export default class EventManager {
     /**
      * Создает экземпляр менеджера событий
@@ -5,9 +7,14 @@ export default class EventManager {
      * @param {Object} model - Модель данных, которая будет использоваться как контекст в обработчиках событий
      */
     constructor(domManager, model) {
+        Logger.DEBUG_LEVEL = model.options.debug ? 4 : 0;
+        Logger.debug('Model: Init EventManager');
+
         this.domManager = domManager;
         this.model = model;
-        this.eventHandlers = new Map(); // Хранит все зарегистрированные обработчики событий
+        this.eventHandlers = new Map(); 
+        
+        Logger.debug('Model: EventManager initialized');
     }
 
     /**
@@ -16,14 +23,17 @@ export default class EventManager {
      * @param {HTMLElement} rootElement - Корневой элемент для поиска событий
      */
     parseEvents(rootElement) {
+        Logger.debug("Parsing events with @...")
         const allElements = rootElement.querySelectorAll('*');
         const elements = [rootElement, ...Array.from(allElements)];
-
+        
         elements.forEach(element => {
             const attributes = Array.from(element.attributes || []);
-
+            
             attributes.forEach(attr => {
                 if (attr.name.startsWith('@')) {
+                    Logger.debug(`Found attribute with "@" ${attr.name} in`, element)
+
                     const eventName = attr.name.substring(1); // Убираем @ из имени атрибута
                     const handler = attr.value.trim();
 
@@ -41,6 +51,8 @@ export default class EventManager {
      * @param {string} handlerExpression - Строка с обработчиком события
      */
     bindEventHandler(element, eventName, handlerExpression) {
+        Logger.debug(`Binding event handler with expression ${handlerExpression} for ${eventName} on`, element);
+        
         const eventHandler = (event) => {
             try {
                 const context = {
@@ -81,14 +93,17 @@ export default class EventManager {
                                 }
 
                                 if (param === '$event') {
+                                    Logger.debug(`Requested Event`, event);
                                     return event;
                                 }
                                 
                                 if (param === '$model') {
+                                    Logger.debug(`Requested Model`, this.model);
                                     return this.model;
                                 }
                                 
                                 if (param === '$data') {
+                                    Logger.debug(`Requested Model Context`, this.model.data);
                                     return this.model.data;
                                 }
 
@@ -132,6 +147,7 @@ export default class EventManager {
      * @param {string} eventName - Имя события (без @)
      */
     removeEventHandler(element, eventName) {
+        Logger.debug(`Removing event handler for ${eventName} on`, element);
         if (this.eventHandlers.has(element)) {
             const elementHandlers = this.eventHandlers.get(element);
 
@@ -152,6 +168,7 @@ export default class EventManager {
      * @param {HTMLElement} element - DOM элемент для обновления
      */
     updateEvents(element) {
+        Logger.debug('Updating events for', element);
         Array.from(element.attributes || []).forEach(attr => {
             if (attr.name.startsWith('@')) {
                 const eventName = attr.name.substring(1);

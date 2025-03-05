@@ -7,7 +7,7 @@ export default class ExpressionManager {
      *    context paths and their values are retrieved using the `getValueFromContext` method.
      * 2. Ternary, logical, and comparison operations within the expression
      *    are parsed and evaluated using the `parseExpression` method.
-     * 3. Literal or primitive values (e.g., numbers, strings, booleans) are directly returned.
+     * 3. Literal or primitive values (for example, numbers, strings, booleans) are directly returned.
      *
      * Any parsing or evaluation errors are caught and logged.
      *
@@ -35,7 +35,7 @@ export default class ExpressionManager {
      *
      * This method allows accessing nested properties or array elements from an object
      * using a path string. If a part of the path references an array, you can include
-     * an array index (e.g., 'path.toArray[0]'). If the path is invalid or the property
+     * an array index (for example, 'path.toArray[0]'). If the path is invalid or the property
      * doesn't exist, the method will return undefined.
      *
      * @param {Object} obj - The context object to retrieve values from.
@@ -63,7 +63,7 @@ export default class ExpressionManager {
      * This method handles several types of expressions, including:
      * 1. Ternary expressions (`condition ? trueValue : falseValue`).
      * 2. Logical expressions with `&&` (AND) and `||` (OR).
-     * 3. Comparison expressions (e.g., `===`, `!==`, `>`, `<`, `>=`, `<=`).
+     * 3. Comparison expressions (for example, `===`, `!==`, `>`, `<`, `>=`, `<=`).
      * 4. String literals inside single or double quotes.
      * 5. Numeric literals (integers and floats).
      * 6. Boolean literals (`true`, `false`), and `null`, `undefined`.

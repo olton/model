@@ -27,7 +27,7 @@ export default class AttributeManager {
         this.model = model;
         
         Logger.DEBUG_LEVEL = this.model.options.debug ? 4 : 0;
-        Logger.debug("Init AttributeManager")
+        Logger.debug("AttributeManager: Init AttributeManager")
     }
 
     /**
@@ -42,12 +42,12 @@ export default class AttributeManager {
      * @throws {Error} When binding expression parsing fails
      */
     parseAttributesBind(rootElement) {
-        Logger.debug("Parsing attributes bind with data-bind...")
+        Logger.debug("AttributeManager: Parsing attributes bind with data-bind...")
         const elements = rootElement.querySelectorAll('[data-bind]');
-        Logger.debug("Found elements with data-bind:", elements.length)
+        Logger.debug("AttributeManager: Found elements with data-bind:", elements.length)
         
         elements.forEach(element => {
-            Logger.debug("Parsing element with data-bind:", element)
+            Logger.debug("AttributeManager: Parsing element with data-bind:", element)
             const bindingExpression = element.getAttribute('data-bind');
 
             try {
@@ -57,7 +57,7 @@ export default class AttributeManager {
 
                     const variables = ExpressionManager.extractVariables(expression);
 
-                    Logger.debug(`Found variables for ${attributeName}:`, variables)
+                    Logger.debug(`AttributeManager: Found variables for ${attributeName}:`, variables)
 
                     variables.forEach(variable => {
                         this.domManager.registerDomDependency(variable, element, {
@@ -82,7 +82,7 @@ export default class AttributeManager {
      *
      * - If the expression represents a falsy value (false, null, undefined), the attribute is removed.
      * - If the value is `true`, the attribute is added without a value ("").
-     * - Otherwise, the attribute is set to the stringified value of the evaluated expression.
+     * - Otherwise, the attribute is set to the string field value of the evaluated expression.
      *
      * @param {HTMLElement} element - The DOM element whose attribute needs to be updated.
      * @param {string} attributeName - The name of the attribute to be updated.
@@ -117,14 +117,13 @@ export default class AttributeManager {
             } else {
                 element.setAttribute(attributeName, String(value));
             }
-            Logger.debug(`Updated attribute ${attributeName} with value:`, value)
+            Logger.debug(`AttributeManager: Updated attribute ${attributeName} with value:`, value)
         }
     }
 
     /**
-     * Parses and processes attribute bindings in the provided root
-     * DOM element. Attributes prefixed with a colon (e.g., `:class`)
-     * are treated as dynamic bindings.
+     * Parses and processes attribute bindings in the provided root DOM element. 
+     * Attributes prefixed with a colon (for example, `:class`) * are treated as dynamic bindings.
      *
      * For each dynamically bound attribute:
      * - Updates the attribute value on the element based on the
@@ -137,7 +136,7 @@ export default class AttributeManager {
      *                                    for attribute bindings.
      */
     parseAttributes(rootElement) {
-        Logger.debug("Parsing attributes with colon...")
+        Logger.debug("AttributeManager: Parsing attributes with colon...")
         
         const allElements = rootElement.querySelectorAll('*');
 
@@ -148,7 +147,7 @@ export default class AttributeManager {
                 const attr = attributes[i];
 
                 if (attr.name.startsWith(':')) {
-                    Logger.debug(`Found attribute:`, attr)
+                    Logger.debug(`AttributeManager: Found attribute:`, attr)
 
                     const realAttrName = attr.name.substring(1);
 
@@ -177,7 +176,7 @@ export default class AttributeManager {
      * for Boolean or string values. For other attributes, it assigns the value
      * directly.
      *
-     * If the value for the given expression cannot be resolved from the model store,
+     * If the value for the given expression can't be resolved from the model store,
      * a warning is logged to the console.
      *
      * @param {HTMLElement} element - The DOM element whose attribute is being updated.
@@ -185,13 +184,13 @@ export default class AttributeManager {
      * @param {string} expression - The model store expression to retrieve the value.
      */
     updateElementAttribute(element, attribute, expression) {
-        const value = this.model.store.get(expression);
+        const value = ""+this.model.store.get(expression);
 
-        if (value === undefined) {
+        if (value === undefined || value === "undefined") {
             return;
         }
 
-        Logger.debug(`Updating attribute ${attribute} with ${value}`)
+        Logger.debug(`AttributeManager: Updating attribute ${attribute} with ${value}`)
         
         if (attribute === 'class') {
             element.className = value;
@@ -211,7 +210,7 @@ export default class AttributeManager {
     }
     
     update(element, attribute, expression){
-        Logger.debug(`Updating element:`, element)
+        Logger.debug(`AttributeManager: Updating element:`, element)
         Logger.debug(`\t Attribute: ${attribute} for:`, expression)
         
         this.updateAttributes(element, attribute, expression);

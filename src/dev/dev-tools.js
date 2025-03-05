@@ -189,7 +189,7 @@ class ModelDevTools {
      * - Updates the DevTools display to reflect the new changes.
      *
      * @param {Object} entry - The change entry to log.
-     * @param {string} entry.type - The type of change (e.g., 'data-change', 'model-event', etc.).
+     * @param {string} entry.type - The type of change (for example, 'data-change', 'model-event', etc.).
      * @param {string} [entry.path] - Path of the property being changed (if applicable).
      * @param {any} [entry.oldValue] - The previous value of the changed property (if applicable).
      * @param {any} [entry.newValue] - The new value of the changed property (if applicable).
@@ -213,7 +213,7 @@ class ModelDevTools {
      * - Updates the snapshot history and current snapshot index.
      *
      * @param {Object} entry - The change entry that triggered the snapshot.
-     * @param {string} entry.type - The type of change (e.g., 'data-change', 'model-event', etc.).
+     * @param {string} entry.type - The type of change (for example, 'data-change', 'model-event', etc.).
      * @param {string} [entry.path] - Path of the property being changed (if applicable).
      * @param {any} [entry.oldValue] - The previous value before the change (if applicable).
      * @param {any} [entry.newValue] - The new value after the change (if applicable).

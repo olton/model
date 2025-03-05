@@ -21,7 +21,7 @@ export default class DOMManager {
      */
     constructor(model) {
         Logger.DEBUG_LEVEL = model.options.debug ? 4 : 0;
-        Logger.debug('Model: Init DOMManager');
+        Logger.debug('DOMManager: Init DOMManager');
 
         this.model = model;
         this.elements = [];
@@ -34,7 +34,7 @@ export default class DOMManager {
         this.attributeManager = new AttributeManager(this, model);
         this.eventManager = new EventManager(this, model);
         
-        Logger.debug('Model: DOMManager initialized');
+        Logger.debug('DOMManager: DOMManager initialized');
     }
 
     /**
@@ -68,6 +68,8 @@ export default class DOMManager {
      * @param {Object} context - Optional context data for placeholder replacement
      */
     processTemplateNode(node, context) {
+        Logger.debug('DOMManager: processTemplateNode', {node, context});
+        
         if (node.nodeType === Node.TEXT_NODE) {
             const originalText = node.textContent;
             const newText = node.textContent.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
@@ -91,6 +93,7 @@ export default class DOMManager {
                 return value !== undefined ? value : '';
             });
             if (originalText !== newText) {
+                Logger.debug(`DOMManager: updated node text from ${originalText} to ${newText}`);
                 node.textContent = newText;
             }
         } else if (node.nodeType === Node.ELEMENT_NODE) {
@@ -111,6 +114,8 @@ export default class DOMManager {
      * @param {HTMLElement} root - Starting point for DOM traversal
      */
     parse(root) {
+        Logger.debug('DOMManager: parse from', root);
+        
         const walker = document.createTreeWalker(
             root,
             NodeFilter.SHOW_TEXT,
@@ -128,6 +133,8 @@ export default class DOMManager {
             regex.lastIndex = 0;
 
             while ((match = regex.exec(text)) !== null) {
+                Logger.debug(`DOMManager: parse match found for ${text}`, match);
+                
                 const propPath = match[1].trim();
 
                 this.registerDomDependency(propPath, node, {
@@ -142,13 +149,18 @@ export default class DOMManager {
                 });
             }
 
+            Logger.debug(`DOMManager: update virtual DOM set`, {node, text: node.textContent});
             this.virtualDom.set(node, node.textContent);
         }
 
+        Logger.debug('DOMManager: Find inputs with data-model directive...');
         const inputs = root.querySelectorAll('[data-model]');
+        Logger.debug('DOMManager: Found inputs with data-model:', inputs.length);
         inputs.forEach(input => {
             const property = input.getAttribute('data-model');
 
+            Logger.debug('DOMManager: Register handler for:', {input, property});
+            
             const handler = (e) => {
                 const value = input.type === 'checkbox' || input.type === 'radio'
                     ? e.target.checked
@@ -192,8 +204,10 @@ export default class DOMManager {
      * @param {*} value - The value to set for the associated inputs.
      */
     updateInputs(propName, value) {
+        Logger.debug('DOMManager: updateInputs', {propName, value});
         this.inputs.forEach(item => {
             if (item.property === propName) {
+                Logger.debug('DOMManager: update input', {item, value});
                 this.setInputValue(item.element, value);
             }
         });
@@ -211,6 +225,8 @@ export default class DOMManager {
      * Ensures that the UI remains synchronized with the underlying model.
      */
     updateAllDOM() {
+        Logger.debug('DOMManager: updateAllDOM');
+        
         this.elements.forEach(element => {
             let newContent = element.template;
             newContent = newContent.replace(/\{\{\s*([^}]+)\s*\}\}/g, (match, path) => {
@@ -218,11 +234,15 @@ export default class DOMManager {
                 return this.model.store.get(path);
             });
             element.node.textContent = newContent;
+            Logger.debug(`DOMManager: updated node`, {element, newContent});
         });
 
+        Logger.debug('DOMManager: update inputs');
         this.inputs.forEach(item => {
+            Logger.debug('DOMManager: update input', {item});
             const value = this.model.store.get(item.property);
             this.setInputValue(item.element, value);
+            Logger.debug('DOMManager: updated input', {item, value});
         });
     }
 
@@ -235,6 +255,8 @@ export default class DOMManager {
      * @param {*} value - New value of the property (could be a primitive, object, or array).
      */
     updateDOM(propertyPath, value) {
+        Logger.debug(`DOMManager: update DOM for ${propertyPath} with ${value}`);
+
         if (!propertyPath) {
             console.warn('Path is undefined in updateDOM');
             return;
@@ -320,7 +342,7 @@ export default class DOMManager {
      * Updates a template-based DOM node's content with the latest values
      * from the model store.
      *
-     * This method uses a Mustache-like syntax (e.g., `{{propertyName}}`)
+     * This method uses a Mustache-like syntax (for example, `{{propertyName}}`)
      * to replace placeholders in the template with actual values retrieved
      * from the model store. If the content changes compared to the virtual DOM,
      * the DOM node is updated, and the new content is recorded in the virtual DOM.
@@ -346,8 +368,8 @@ export default class DOMManager {
      *
      * A path is considered a dependency if:
      * - It is identical to the other path.
-     * - It is a hierarchical descendent of the other path (e.g., pathB starts with pathA).
-     * - It is an array element of the other path (e.g., pathB starts with pathA followed by an array index).
+     * - It is a hierarchical descendent of the other path (for example, pathB starts with pathA).
+     * - It is an array element of the other path (for example, pathB starts with pathA followed by an array index).
      *
      * @param {string} pathA - The base path to check against.
      * @param {string} pathB - The path to verify as a dependency.
@@ -362,7 +384,7 @@ export default class DOMManager {
     /**
      * Retrieves all paths from the DOM dependency tracker that are
      * dependent on the given path. A path is considered dependent if:
-     * - It is hierarchically related (e.g., path starts with the given path).
+     * - It is hierarchically related (for example, a path starts with the given path).
      * - It matches exactly with the given path.
      *
      * This method collects and returns all such dependent paths.
@@ -396,6 +418,7 @@ export default class DOMManager {
      * @param {HTMLElement} rootElement - The root element to initiate the DOM binding process.
      */
     bindDOM(rootElement) {
+        Logger.debug('DOMManager: bind DOM from', rootElement);
         this.loopManager.parseLoops(rootElement);
         this.conditionalManager.parseConditionals(rootElement);
         this.attributeManager.parseAttributesBind(rootElement);
@@ -403,6 +426,7 @@ export default class DOMManager {
         this.eventManager.parseEvents(rootElement);
         this.parse(rootElement);
         this.updateAllDOM();
+        Logger.debug('DOMManager: binding completed');
     }
     
     /**
@@ -430,5 +454,7 @@ export default class DOMManager {
         this.loopManager.destroy();
         this.conditionalManager.destroy();
         this.eventManager.destroy();
+        
+        Logger.debug('DOMManager: destroyed');
     }
 }

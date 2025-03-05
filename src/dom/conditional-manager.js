@@ -25,7 +25,7 @@ export default class ConditionalManager {
      */
     constructor(dom, model) {
         Logger.DEBUG_LEVEL = model.options.debug ? 4 : 0;
-        Logger.debug("Init ConditionalManager")
+        Logger.debug("ConditionalManager: Init ConditionalManager")
 
         this.dom = dom;
         this.model = model;
@@ -34,7 +34,7 @@ export default class ConditionalManager {
 
         this.subscribe();
         
-        Logger.debug('Model: ConditionalManager initialized');
+        Logger.debug('ConditionalManager: ConditionalManager initialized');
     }
 
     /**
@@ -131,7 +131,7 @@ export default class ConditionalManager {
 
         nodes.forEach(node => {
             if (node.hasAttribute('data-if')) {
-                Logger.debug(`Found data-if in element:`, node);
+                Logger.debug(`ConditionalManager: Found data-if in element:`, node);
                 if (currentGroup.length) {
                     groups.push(currentGroup);
                 }
@@ -141,7 +141,7 @@ export default class ConditionalManager {
                     expression: node.getAttribute('data-if')
                 }];
             } else if (node.hasAttribute('data-else-if')) {
-                Logger.debug(`Found data-else-if in element:`, node);
+                Logger.debug(`ConditionalManager: Found data-else-if in element:`, node);
                 if (currentGroup.length && this.isAdjacentNode(currentGroup[currentGroup.length - 1].element, node)) {
                     currentGroup.push({
                         element: node,
@@ -159,7 +159,7 @@ export default class ConditionalManager {
                     }];
                 }
             } else if (node.hasAttribute('data-else')) {
-                Logger.debug(`Found data-else in element:`, node);
+                Logger.debug(`ConditionalManager: Found data-else in element:`, node);
                 if (currentGroup.length && this.isAdjacentNode(currentGroup[currentGroup.length - 1].element, node)) {
                     currentGroup.push({
                         element: node,
@@ -170,7 +170,7 @@ export default class ConditionalManager {
                     groups.push(currentGroup);
                     currentGroup = [];
                 } else {
-                    console.warn('data-else without previous data-if or data-else-if', node);
+                    Logger.warn('data-else without previous data-if or data-else-if', node);
                 }
             }
         });
@@ -243,19 +243,15 @@ export default class ConditionalManager {
 
         for (const item of group) {
             if (item.type === 'if' || item.type === 'else-if') {
-
                 const result = !conditionMet && ExpressionManager.evaluateExpression(item.expression, context);
 
                 if (result) {
-
                     item.element.style.display = '';
                     conditionMet = true;
                 } else {
-
                     item.element.style.display = 'none';
                 }
             } else if (item.type === 'else') {
-
                 item.element.style.display = conditionMet ? 'none' : '';
             }
         }
@@ -387,5 +383,7 @@ export default class ConditionalManager {
     destroy() {
         this.dependencies.clear();
         this.conditionalGroups = [];
+        
+        Logger.debug('ConditionalManager: Destroyed');
     }
 }

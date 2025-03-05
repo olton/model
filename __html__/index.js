@@ -33,7 +33,8 @@ const app = new Model({
     //     this.posts = await fetch("https://jsonplaceholder.typicode.com/posts").then(res => res.json());
     // }
 }, {
-    useSimpleExpressions: true
+    useSimpleExpressions: true,
+    debug: true,
 })
 
 app.init("#root")
