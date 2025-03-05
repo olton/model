@@ -108,7 +108,10 @@ class ModelDevTools {
         dialog.innerHTML = `
             <div class="dev-tools-header">
                 <span>⏱ Time Travel</span>
-                <button style="margin-left: auto" onclick="this.parentElement.parentElement.remove()">×</button>
+                <div>
+                    <button style="margin-left: auto;" onclick="window.__MODEL_DEVTOOLS__.clearTimeTravel()">CLear</button>
+                    <button onclick="this.parentElement.parentElement.remove()">×</button>                
+                </div>
             </div>
             <div class="time-travel-items">${statesList || 'Nothing to show!'}</div>
         `;
@@ -459,6 +462,12 @@ class ModelDevTools {
         }
     }
 
+    clearTimeTravel() {
+        this.history = [];
+        this.currentIndex = -1;
+        this.showTimeTravelDialog();
+    }
+    
     /**
      * Starts performance monitoring for the model's store.
      *
