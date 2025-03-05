@@ -7,7 +7,7 @@ import StateManager from "../state-manager/state-manager.js";
 
 /**
  * Default options for the Model class.
- * @type {{id: string, memoizeComputed: boolean}}
+ * @type {{id: string}}
  */
 const ModelOptions = {
     id: "model", 
@@ -52,7 +52,7 @@ class Model extends EventEmitter {
         this.stateManager = new StateManager(this.store);
 
         this.subscribe();
-        this.computedProps.init();
+        this.computedProps.init().then(()=>{});
     }
 
     /**
@@ -63,7 +63,7 @@ class Model extends EventEmitter {
         this.store.on("change", (data) => {
             this.dom.updateDOM(data.path, data.newValue);
             this.dom.updateInputs(data.path, data.newValue);
-            this.computedProps.update(data.path);
+            this.computedProps.update(data.path).then(()=>{});
             
             this.emit("change", data);
         });
