@@ -135,7 +135,96 @@ class Model extends EventEmitter {
     diff(){
         // Not implemented yet
     }
-    
+
+    /**
+     * Validates the model for potential issues, including:
+     *
+     * 1. Cyclic dependencies in computed properties: Ensures that no property in the `computed`
+     *    object of the model depends on itself through a chain of other properties.
+     * 2. Invalid paths in DOM dependencies: Ensures that all paths used in the DOM template
+     *    exist within the model's store.
+     *
+     * @returns {{errors: Array<Object>, warnings: Array<Object>}} - Returns an object containing arrays
+     *          of errors and warnings. Each error or warning is represented as an object with details
+     *          about the issue.
+     *
+     * Errors include:
+     * - `CYCLIC_DEPENDENCY`: Indicates a cyclic dependency was found in `computed` properties.
+     *   - `property`: The property with the cyclic dependency.
+     *   - `message`: Description of the cyclic dependency.
+     *
+     * Warnings include:
+     * - `INVALID_PATH`: Indicates a path used in the DOM does not exist in the model.
+     *   - `path`: The invalid path.
+     *   - `message`: Description of the invalid path.
+     */
+    validateModel() {
+        const errors = [];
+        const warnings = [];
+
+        for (const key in this.computed) {
+            const visited = new Set();
+            const cyclePath = this.checkCyclicDependencies(key, visited);
+            if (cyclePath) {
+                errors.push({
+                    type: 'CYCLIC_DEPENDENCY',
+                    property: key,
+                    message: `Cyclic dependence is found: ${cyclePath.join(' -> ')}`
+                });
+            }
+        }
+
+        this.dom.domDependencies.forEach((deps, path) => {
+            if (!this.store.isValidPath(path)) {
+                warnings.push({
+                    type: 'INVALID_PATH',
+                    path,
+                    message: `Property ${path} used in the template, but does not exist in the model`
+                });
+            }
+        });
+
+        return {errors, warnings};
+    }
+
+    /**
+     * Checks for cyclic dependencies in the computed properties of the model.
+     *
+     * This method recursively traverses the dependencies of a given property to determine
+     * if a cyclic dependency exists. A cyclic dependency occurs when a property ultimately
+     * depends on itself through a chain of other properties.
+     *
+     * @param {string} key - The key of the property to check for cyclic dependencies.
+     * @param {Set<string>} visited - A set of visited properties during the traversal.
+     * @param {string[]} [path=[]] - The current path of dependencies being checked.
+     * @returns {string[]|null} - Returns an array representing the cyclic path if a cycle is found,
+     *                            otherwise `null`.
+     */
+    checkCyclicDependencies(key, visited, path = []) {
+        if (visited.has(key)) {
+            return [...path, key];
+        }
+
+        visited.add(key);
+        path.push(key);
+
+        const computed = this.computed[key];
+        if (!computed || !computed.dependencies) {
+            return null;
+        }
+
+        for (const dep of computed.dependencies) {
+            if (dep in this.computed) {
+                const cyclePath = this.checkCyclicDependencies(dep, new Set(visited), [...path]);
+                if (cyclePath) {
+                    return cyclePath;
+                }
+            }
+        }
+
+        return null;
+    }
+
     /**
      * Initializes the DOM bindings for the model.
      * @param {string|HTMLElement} selector - Selector or root element to bind on.

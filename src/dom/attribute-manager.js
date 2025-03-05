@@ -36,7 +36,7 @@ export default class AttributeManager {
      * @param {HTMLElement} rootElement - The root element containing elements with data bindings.
      * @throws {Error} When binding expression parsing fails
      */
-    parseAttributes(rootElement) {
+    parseAttributesBind(rootElement) {
         const elements = rootElement.querySelectorAll('[data-bind]');
 
         elements.forEach(element => {
@@ -59,7 +59,7 @@ export default class AttributeManager {
                     });
 
 
-                    this.updateAttribute(element, attributeName, expression);
+                    this.updateAttributes(element, attributeName, expression);
                 }
             } catch (error) {
                 console.error('An error of analysis of attachments:', error);
@@ -86,7 +86,7 @@ export default class AttributeManager {
      * - Expression evaluation for non-template strings
      * 
      */
-    updateAttribute(element, attributeName, expression) {
+    updateAttributes(element, attributeName, expression) {
         const context = {...this.model.store.getState()};
         let value;
 
@@ -111,5 +111,94 @@ export default class AttributeManager {
                 element.setAttribute(attributeName, String(value));
             }
         }
+    }
+
+    /**
+     * Parses and processes attribute bindings in the provided root
+     * DOM element. Attributes prefixed with a colon (e.g., `:class`)
+     * are treated as dynamic bindings.
+     *
+     * For each dynamically bound attribute:
+     * - Updates the attribute value on the element based on the
+     *   current model store state.
+     * - Registers a dependency between the element and the attribute
+     *   expression in the DOM dependency tracker.
+     * - Removes the colon-prefixed attribute from the DOM.
+     *
+     * @param {HTMLElement} rootElement - The root element to search
+     *                                    for attribute bindings.
+     */
+    parseAttributes(rootElement) {
+        const allElements = rootElement.querySelectorAll('*');
+
+        for (const element of allElements) {
+            const attributes = element.attributes;
+
+            for (let i = 0; i < attributes.length; i++) {
+                const attr = attributes[i];
+
+                if (attr.name.startsWith(':')) {
+
+                    const realAttrName = attr.name.substring(1);
+
+                    const expression = attr.value;
+
+                    this.updateElementAttribute(element, realAttrName, expression);
+
+                    this.domManager.registerDomDependency(expression, element, {
+                        type: 'attribute',
+                        attribute: realAttrName,
+                        expression: expression
+                    });
+
+                    element.removeAttribute(attr.name);
+                }
+            }
+        }
+    }
+
+    /**
+     * Updates the value of a DOM element's attribute based on the current
+     * state of the model store.
+     *
+     * Dynamically handles specific attributes like `class`, `disabled`,
+     * `checked`, `selected`, and `readonly` to ensure they're properly assigned
+     * for Boolean or string values. For other attributes, it assigns the value
+     * directly.
+     *
+     * If the value for the given expression cannot be resolved from the model store,
+     * a warning is logged to the console.
+     *
+     * @param {HTMLElement} element - The DOM element whose attribute is being updated.
+     * @param {string} attribute - The name of the attribute to update.
+     * @param {string} expression - The model store expression to retrieve the value.
+     */
+    updateElementAttribute(element, attribute, expression) {
+        const value = this.model.store.get(expression);
+
+        if (value === undefined) {
+            return;
+        }
+
+        if (attribute === 'class') {
+            element.className = value;
+        } else if (attribute === 'disabled' ||
+            attribute === 'checked' ||
+            attribute === 'selected' ||
+            attribute === 'readonly') {
+
+            if (value) {
+                element.setAttribute(attribute, '');
+            } else {
+                element.removeAttribute(attribute);
+            }
+        } else {
+            element.setAttribute(attribute, value);
+        }
+    }
+    
+    update(element, attribute, expression){
+        this.updateAttributes(element, attribute, expression);
+        this.updateElementAttribute(element, attribute, expression)
     }
 }

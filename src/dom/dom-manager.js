@@ -1,6 +1,7 @@
 import LoopManager from "./loop-manager.js";
 import ConditionalManager from "./conditional-manager.js";
 import AttributeManager from "./attribute-manager.js";
+import EventManager from "./event-manager.js";
 
 /**
  * The DOMManager class handles interactions with the DOM, including the registration of DOM dependencies,
@@ -27,6 +28,7 @@ export default class DOMManager {
         this.loopManager = new LoopManager(this, model);
         this.conditionalManager = new ConditionalManager(this, model);
         this.attributeManager = new AttributeManager(this, model);
+        this.eventManager = new EventManager(this, model);
     }
 
     /**
@@ -305,7 +307,7 @@ export default class DOMManager {
 
         updates.template.forEach(dep => this.updateTemplateNode(dep.element, dep.template));
         updates.conditional.forEach(dep => this.conditionalManager.updateConditional(dep.element, dep.expression));
-        updates.attribute.forEach(dep => this.attributeManager.updateAttribute(dep.element, dep.attribute, dep.expression));
+        updates.attribute.forEach(dep => this.attributeManager.update(dep.element, dep.attribute, dep.expression));
         updates.loop.forEach(dep => this.loopManager.updateLoopPart(dep.element, dep.arrayPath, value, dep.index));
     }
 
@@ -331,91 +333,6 @@ export default class DOMManager {
         if (this.virtualDom.get(node) !== newContent) {
             node.textContent = newContent;
             this.virtualDom.set(node, newContent);
-        }
-    }
-
-    /**
-     * Parses and processes attribute bindings in the provided root
-     * DOM element. Attributes prefixed with a colon (e.g., `:class`)
-     * are treated as dynamic bindings.
-     *
-     * For each dynamically bound attribute:
-     * - Updates the attribute value on the element based on the
-     *   current model store state.
-     * - Registers a dependency between the element and the attribute
-     *   expression in the DOM dependency tracker.
-     * - Removes the colon-prefixed attribute from the DOM.
-     *
-     * @param {HTMLElement} rootElement - The root element to search
-     *                                    for attribute bindings.
-     */
-    parseAttributeBindings(rootElement) {
-        const allElements = rootElement.querySelectorAll('*');
-
-        for (const element of allElements) {
-            const attributes = element.attributes;
-
-            for (let i = 0; i < attributes.length; i++) {
-                const attr = attributes[i];
-
-                if (attr.name.startsWith(':')) {
-
-                    const realAttrName = attr.name.substring(1);
-
-                    const expression = attr.value;
-
-                    this.updateElementAttribute(element, realAttrName, expression);
-
-                    this.registerDomDependency(expression, element, {
-                        type: 'attribute',
-                        attribute: realAttrName,
-                        expression: expression
-                    });
-
-                    element.removeAttribute(attr.name);
-                }
-            }
-        }
-    }
-
-    /**
-     * Updates the value of a DOM element's attribute based on the current
-     * state of the model store.
-     *
-     * Dynamically handles specific attributes like `class`, `disabled`,
-     * `checked`, `selected`, and `readonly` to ensure they're properly assigned
-     * for Boolean or string values. For other attributes, it assigns the value
-     * directly.
-     *
-     * If the value for the given expression cannot be resolved from the model store,
-     * a warning is logged to the console.
-     *
-     * @param {HTMLElement} element - The DOM element whose attribute is being updated.
-     * @param {string} attribute - The name of the attribute to update.
-     * @param {string} expression - The model store expression to retrieve the value.
-     */
-    updateElementAttribute(element, attribute, expression) {
-        const value = this.model.store.get(expression);
-
-        if (value !== undefined) {
-
-            if (attribute === 'class') {
-                element.className = value;
-            } else if (attribute === 'disabled' ||
-                attribute === 'checked' ||
-                attribute === 'selected' ||
-                attribute === 'readonly') {
-
-                if (value) {
-                    element.setAttribute(attribute, '');
-                } else {
-                    element.removeAttribute(attribute);
-                }
-            } else {
-                element.setAttribute(attribute, value);
-            }
-        } else {
-            console.warn(`Value for ${expression} not found in the model`);
         }
     }
 
@@ -476,101 +393,13 @@ export default class DOMManager {
     bindDOM(rootElement) {
         this.loopManager.parseLoops(rootElement);
         this.conditionalManager.parseConditionals(rootElement);
+        this.attributeManager.parseAttributesBind(rootElement);
         this.attributeManager.parseAttributes(rootElement);
-        this.parseAttributeBindings(rootElement);
+        this.eventManager.parseEvents(rootElement);
         this.parse(rootElement);
         this.updateAllDOM();
     }
-
-    /**
-     * Validates the model for potential issues, including:
-     *
-     * 1. Cyclic dependencies in computed properties: Ensures that no property in the `computed`
-     *    object of the model depends on itself through a chain of other properties.
-     * 2. Invalid paths in DOM dependencies: Ensures that all paths used in the DOM template
-     *    exist within the model's store.
-     *
-     * @returns {{errors: Array<Object>, warnings: Array<Object>}} - Returns an object containing arrays
-     *          of errors and warnings. Each error or warning is represented as an object with details
-     *          about the issue.
-     *
-     * Errors include:
-     * - `CYCLIC_DEPENDENCY`: Indicates a cyclic dependency was found in `computed` properties.
-     *   - `property`: The property with the cyclic dependency.
-     *   - `message`: Description of the cyclic dependency.
-     *
-     * Warnings include:
-     * - `INVALID_PATH`: Indicates a path used in the DOM does not exist in the model.
-     *   - `path`: The invalid path.
-     *   - `message`: Description of the invalid path.
-     */
-    validateModel() {
-        const errors = [];
-        const warnings = [];
-
-        for (const key in this.model.computed) {
-            const visited = new Set();
-            const cyclePath = this.checkCyclicDependencies(key, visited);
-            if (cyclePath) {
-                errors.push({
-                    type: 'CYCLIC_DEPENDENCY',
-                    property: key,
-                    message: `Cyclic dependence is found: ${cyclePath.join(' -> ')}`
-                });
-            }
-        }
-
-        this.domDependencies.forEach((deps, path) => {
-            if (!this.model.store.isValidPath(path)) {
-                warnings.push({
-                    type: 'INVALID_PATH',
-                    path,
-                    message: `Property ${path} used in the template, but does not exist in the model`
-                });
-            }
-        });
-
-        return {errors, warnings};
-    }
-
-    /**
-     * Checks for cyclic dependencies in the computed properties of the model.
-     *
-     * This method recursively traverses the dependencies of a given property to determine
-     * if a cyclic dependency exists. A cyclic dependency occurs when a property ultimately
-     * depends on itself through a chain of other properties.
-     *
-     * @param {string} key - The key of the property to check for cyclic dependencies.
-     * @param {Set<string>} visited - A set of visited properties during the traversal.
-     * @param {string[]} [path=[]] - The current path of dependencies being checked.
-     * @returns {string[]|null} - Returns an array representing the cyclic path if a cycle is found,
-     *                            otherwise `null`.
-     */
-    checkCyclicDependencies(key, visited, path = []) {
-        if (visited.has(key)) {
-            return [...path, key];
-        }
-
-        visited.add(key);
-        path.push(key);
-
-        const computed = this.model.computed[key];
-        if (!computed || !computed.dependencies) {
-            return null;
-        }
-
-        for (const dep of computed.dependencies) {
-            if (dep in this.model.computed) {
-                const cyclePath = this.checkCyclicDependencies(dep, new Set(visited), [...path]);
-                if (cyclePath) {
-                    return cyclePath;
-                }
-            }
-        }
-
-        return null;
-    }
-
+    
     /**
      * Destroys the instance by performing cleanup tasks.
      *
@@ -595,5 +424,6 @@ export default class DOMManager {
 
         this.loopManager.destroy();
         this.conditionalManager.destroy();
+        this.eventManager.destroy();
     }
 }
