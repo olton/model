@@ -158,13 +158,13 @@ class Model extends EventEmitter {
      *   - `path`: The invalid path.
      *   - `message`: Description of the invalid path.
      */
-    validateModel() {
+    validate() {
         const errors = [];
         const warnings = [];
 
         for (const key in this.computed) {
             const visited = new Set();
-            const cyclePath = this.checkCyclicDependencies(key, visited);
+            const cyclePath = this._checkCyclicDependencies(key, visited);
             if (cyclePath) {
                 errors.push({
                     type: 'CYCLIC_DEPENDENCY',
@@ -200,7 +200,7 @@ class Model extends EventEmitter {
      * @returns {string[]|null} - Returns an array representing the cyclic path if a cycle is found,
      *                            otherwise `null`.
      */
-    checkCyclicDependencies(key, visited, path = []) {
+    _checkCyclicDependencies(key, visited, path = []) {
         if (visited.has(key)) {
             return [...path, key];
         }
