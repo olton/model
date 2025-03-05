@@ -21,8 +21,15 @@
 <!--    -->
 <!--    <hr/>-->
     <img :src="path_to_image" alt="Изображение">
-    <button :disabled="is_disabled">Кнопка</button>
     <button onclick="enableButton()">Кнопка</button>
+    <button :disabled="is_disabled">:disabled</button>
+    <button @click="this.counter++">+</button>
+    <button @click="this.counter--">-</button>
+    <button @click="__data($data)">data</button>
+    <button @click="__event($event)">event</button>
+    <button @click="__model($model)">model</button>
+    <button @click="__vars('document', 123)">vars</button>
+    <button @click="__context()">context</button>
     <hr/>
     
     <div data-for="item in items">

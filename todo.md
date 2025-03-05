@@ -1,1 +1,1 @@
-+ Додати директиву @event для обробки подій
++ move evaluateExpression to its own file

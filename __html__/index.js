@@ -32,6 +32,8 @@ const app = new Model({
     async _posts(){
         this.posts = await fetch("https://jsonplaceholder.typicode.com/posts").then(res => res.json());
     }
+}, {
+    useSimpleExpressions: true
 })
 
 app.init("#root")
@@ -61,3 +63,8 @@ app.runDevTools({
     maxSnapshots: 50
 });
 
+globalThis.__data = (args) => { console.log(args); }
+globalThis.__event = (args) => { console.log(args); }
+globalThis.__model = (args) => { console.log(args); }
+globalThis.__vars = (...args) => { console.log(args); }
+globalThis.__context = function() { console.log(this); }

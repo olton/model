@@ -4,6 +4,7 @@ import ReactiveStore from "../reactive/reactive-store.js";
 import DOMManager from "../dom/dom-manager.js";
 import ComputedProps from "../reactive/computed.js";
 import StateManager from "../state-manager/state-manager.js";
+import Logger from "../logger/logger.js";
 
 /**
  * Default options for the Model class.
@@ -11,6 +12,7 @@ import StateManager from "../state-manager/state-manager.js";
  */
 const ModelOptions = {
     id: "model", 
+    useSimpleExpressions: false,
 }
 
 /**
@@ -32,6 +34,7 @@ class Model extends EventEmitter {
     constructor(data = {}, options = {}) {
         super();
 
+        // this.events = []
         this.options = Object.assign({}, ModelOptions, options);
         this.computed = {};
 
@@ -39,12 +42,14 @@ class Model extends EventEmitter {
         for (const key in data) {
             if (typeof data[key] === 'function') {
                 this.computed[key] = {
-                    getter: data[key], value: null, dependencies: []
+                    getter: data[key], 
+                    value: null, 
+                    dependencies: [],
                 };
                 delete data[key];
             }
         }
-
+        
         this.store = new ReactiveStore(data);
         this.data = this.store.state;
         this.dom = new DOMManager(this);

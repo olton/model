@@ -122,27 +122,15 @@ export default class ComputedProps {
         const updatePromises = [];
 
         for (const key in this.computed) {
-            const computed = this.computed[key];
+            const updatePromise = (async () => {
+                const newValue = await this.evaluate(key);
+                this.model.dom.updateDOM(key, newValue);
+                this.model.dom.updateInputs(key, newValue);
+            })();
 
-            const isDependency = computed.dependencies.some(dep => {
-                if (dep === changedProp) return true;
-                if (changedProp.startsWith(dep + '.')) return true;
-                if (dep.startsWith(changedProp + '.')) return true;
-                return false;
-            });
-
-            if (isDependency) {
-                const updatePromise = (async () => {
-                    const newValue = await this.evaluate(key);
-                    this.model.dom.updateDOM(key, newValue);
-                    this.model.dom.updateInputs(key, newValue);
-                })();
-
-                updatePromises.push(updatePromise);
-            }
+            updatePromises.push(updatePromise);
         }
 
-        // Чекаємо завершення всіх оновлень
         await Promise.all(updatePromises);
     }
 

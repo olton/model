@@ -41,7 +41,6 @@ export default class ConditionalManager {
      */
     subscribe() {
         this.model.store.on('change', (data) => {
-
             const dependentGroups = this.getGroupsByPath(data.path);
             dependentGroups.forEach(group => {
                 this.updateConditionalGroup(group);
@@ -364,21 +363,29 @@ export default class ConditionalManager {
      * Variables are returned in their base form (i.e., the part before any dot notation or brackets).
      */
     extractVariables(expression) {
-
         const variables = [];
-        const parts = expression.split(/[^a-zA-Z0-9_.]/);
 
-        parts.forEach(part => {
-            const varName = part.trim();
-            if (varName && /^[a-zA-Z_][a-zA-Z0-9_.]*$/.test(varName)) {
-                const baseName = varName.split('.')[0];
-                if (!variables.includes(baseName) && baseName !== 'true' &&
-                    baseName !== 'false' && baseName !== 'null' &&
-                    baseName !== 'undefined' && !isNaN(Number(baseName))) {
-                    variables.push(baseName);
+        // Удаляем строковые литералы, чтобы не извлекать переменные из них
+        const cleanExpr = expression
+            .replace(/'[^']*'/g, "''")
+            .replace(/"[^"]*"/g, '""');
+
+        // Находим потенциальные переменные
+        const matches = cleanExpr.match(/[a-zA-Z_][a-zA-Z0-9_]*(\.([a-zA-Z_][a-zA-Z0-9_]*))*(\[\d+\])*/g);
+
+        if (matches) {
+            matches.forEach(match => {
+                // Извлекаем базовое имя переменной (до точки или скобки)
+                const baseName = match.split('.')[0].split('[')[0].trim();
+
+                // Проверяем, что это не JavaScript ключевое слово или литерал
+                if (!['true', 'false', 'null', 'undefined'].includes(baseName)) {
+                    if (!variables.includes(baseName)) {
+                        variables.push(baseName);
+                    }
                 }
-            }
-        });
+            });
+        }
 
         return variables;
     }

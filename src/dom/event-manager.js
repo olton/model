@@ -35,76 +35,84 @@ export default class EventManager {
     }
 
     /**
-     * Привязывает обработчик события к DOM элементу
+     * Binds the event handler to the DOM element
      * @param {HTMLElement} element - DOM элемент
      * @param {string} eventName - Имя события (без @)
      * @param {string} handlerExpression - Строка с обработчиком события
      */
     bindEventHandler(element, eventName, handlerExpression) {
-        // Создаем функцию-обработчик, которая будет привязана к модели
         const eventHandler = (event) => {
             try {
-                // Создаем контекст выполнения с доступом к модели и событию
                 const context = {
                     $model: this.model,
                     $event: event,
                     $data: this.model.data
                 };
 
-                // Обработка выражений вида methodName(params)
                 const methodMatch = handlerExpression.match(/(\w+)\((.*)\)/);
 
                 if (methodMatch) {
                     const methodName = methodMatch[1];
                     const paramsString = methodMatch[2];
 
-                    // Проверяем, есть ли у модели такой метод
-                    if (typeof this.model[methodName] === 'function') {
+                    const resolveMethod = (path, context) => {
+                        return path.split('.').reduce((obj, key) => (obj && obj[key] !== undefined) ? obj[key] : undefined, context);
+                    };
+
+                    let method = resolveMethod(methodName, this.model); // Поиск в модели
+                    if (!method) {
+                        method = resolveMethod(methodName, window); // Поиск в глобальном объекте (например, window)
+                    }
+
+                    if (typeof method === 'function') {
                         // Обрабатываем параметры, если они есть
                         let params = [];
                         if (paramsString.trim()) {
-                            // Простой парсинг параметров (для более сложных случаев потребуется улучшить)
                             params = paramsString.split(',').map(param => {
                                 param = param.trim();
 
-                                // Обработка строк в кавычках
                                 if ((param.startsWith('"') && param.endsWith('"')) ||
                                     (param.startsWith("'") && param.endsWith("'"))) {
                                     return param.slice(1, -1);
                                 }
 
-                                // Обработка числовых параметров
                                 if (!isNaN(param)) {
                                     return Number(param);
                                 }
 
-                                // Проверка параметров из контекста
                                 if (param === '$event') {
                                     return event;
                                 }
+                                
+                                if (param === '$model') {
+                                    return this.model;
+                                }
+                                
+                                if (param === '$data') {
+                                    return this.model.data;
+                                }
 
-                                // Получение значения из модели
                                 return this.model.store.get(param);
                             });
                         }
 
-                        // Вызываем метод модели с нужными параметрами
-                        this.model[methodName].apply(this.model, params);
+                        method.apply(context, params);
                     } else {
-                        console.warn(`Метод '${methodName}' не найден в модели`);
+                        console.warn(`Метод '${methodName}' не найден в модели или глобальном пространстве`);
                     }
                 } else {
-                    // Для простых выражений без вызова метода
-                    // Здесь можно добавить eval или Function для выполнения выражения,
-                    // но это может быть небезопасно
-                    console.warn(`Неподдерживаемое выражение: '${handlerExpression}'`);
+                    if (this.model.options.useSimpleExpressions) {
+                        const result = new Function(`return ${handlerExpression}`)
+                        result.apply(this.model.data);
+                    } else {
+                        console.warn(`Неизвестный формат обработчика события: '${handlerExpression}'`);
+                    }
                 }
             } catch (error) {
                 console.error(`Ошибка при выполнении обработчика события '${eventName}': ${error.message}`);
             }
         };
 
-        // Сохраняем обработчик для возможности его удаления в будущем
         if (!this.eventHandlers.has(element)) {
             this.eventHandlers.set(element, new Map());
         }
@@ -119,7 +127,7 @@ export default class EventManager {
     }
 
     /**
-     * Удаляет обработчик события с DOM элемента
+     * Removes the event processor from the DOM element
      * @param {HTMLElement} element - DOM элемент
      * @param {string} eventName - Имя события (без @)
      */
@@ -140,7 +148,7 @@ export default class EventManager {
     }
 
     /**
-     * Обновляет обработчики событий для элемента
+     * Updates events for the element
      * @param {HTMLElement} element - DOM элемент для обновления
      */
     updateEvents(element) {
@@ -156,7 +164,7 @@ export default class EventManager {
     }
 
     /**
-     * Освобождает все ресурсы и удаляет все обработчики событий
+     * Releases all resources and removes all events
      */
     destroy() {
         this.eventHandlers.forEach((handlers, element) => {
