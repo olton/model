@@ -110,7 +110,7 @@ class ModelDevTools {
                 <span>⏱ Time Travel</span>
                 <div>
                     <button style="margin-left: auto;" onclick="window.__MODEL_DEVTOOLS__.clearTimeTravel()">CLear</button>
-                    <button onclick="this.parentElement.parentElement.remove()">×</button>                
+                    <button onclick="this.parentElement.parentElement.parentElement.remove()">×</button>                
                 </div>
             </div>
             <div class="time-travel-items">${statesList || 'Nothing to show!'}</div>
@@ -395,6 +395,9 @@ class ModelDevTools {
         const panel = document.getElementById('model-devtools-panel');
         if (panel) {
             panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        }
+        if (panel.style.display === "none") {
+            document.getElementById('model-devtools-time-travel-dialog').remove();
         }
     }
 
