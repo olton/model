@@ -8,13 +8,13 @@ export default class EventManager {
      */
     constructor(domManager, model) {
         Logger.DEBUG_LEVEL = model.options.debug ? 4 : 0;
-        Logger.debug('Model: Init EventManager');
+        Logger.debug('EventManager: Init EventManager');
 
         this.domManager = domManager;
         this.model = model;
         this.eventHandlers = new Map(); 
         
-        Logger.debug('Model: EventManager initialized');
+        Logger.debug('EventManager: EventManager initialized');
     }
 
     /**
@@ -23,7 +23,7 @@ export default class EventManager {
      * @param {HTMLElement} rootElement - Корневой элемент для поиска событий
      */
     parseEvents(rootElement) {
-        Logger.debug("Parsing events with @...")
+        Logger.debug("EventManager: Parsing events with @...")
         const allElements = rootElement.querySelectorAll('*');
         const elements = [rootElement, ...Array.from(allElements)];
         
@@ -32,7 +32,7 @@ export default class EventManager {
             
             attributes.forEach(attr => {
                 if (attr.name.startsWith('@')) {
-                    Logger.debug(`Found attribute with "@" ${attr.name} in`, element)
+                    Logger.debug(`EventManager: Found attribute with "@" ${attr.name} in`, element)
 
                     const eventName = attr.name.substring(1); // Убираем @ из имени атрибута
                     const handler = attr.value.trim();
@@ -51,7 +51,7 @@ export default class EventManager {
      * @param {string} handlerExpression - Строка с обработчиком события
      */
     bindEventHandler(element, eventName, handlerExpression) {
-        Logger.debug(`Binding event handler with expression ${handlerExpression} for ${eventName} on`, element);
+        Logger.debug(`EventManager: Binding event handler with expression ${handlerExpression} for ${eventName} on`, element);
         
         const eventHandler = (event) => {
             try {
@@ -94,22 +94,22 @@ export default class EventManager {
                                 }
 
                                 if (param === '$event') {
-                                    Logger.debug(`Requested Event`, event);
+                                    Logger.debug(`EventManager: Requested Event`, event);
                                     return event;
                                 }
                                 
                                 if (param === '$model') {
-                                    Logger.debug(`Requested Model`, this.model);
+                                    Logger.debug(`EventManager: Requested Model`, this.model);
                                     return this.model;
                                 }
                                 
                                 if (param === '$data') {
-                                    Logger.debug(`Requested Model Context`, this.model.data);
+                                    Logger.debug(`EventManager: Requested Model Context`, this.model.data);
                                     return this.model.data;
                                 }
                                 
                                 if (param === '$dom') {
-                                    Logger.debug(`Requested DOMManager`, this.domManager);
+                                    Logger.debug(`EventManager: Requested DOMManager`, this.domManager);
                                     return this.domManager;
                                 }
 
@@ -119,18 +119,18 @@ export default class EventManager {
 
                         method.apply(context, params);
                     } else {
-                        console.warn(`Метод '${methodName}' не найден в модели или глобальном пространстве`);
+                        console.warn(`EventManager: The method '${methodName}' not found in a model or global space!`);
                     }
                 } else {
                     if (this.model.options.useSimpleExpressions) {
                         const result = new Function(`return ${handlerExpression}`)
                         result.apply(this.model.data);
                     } else {
-                        console.warn(`Неизвестный формат обработчика события: '${handlerExpression}'`);
+                        console.warn(`EventManager: Unknown format of the event handler: '${handlerExpression}'`);
                     }
                 }
             } catch (error) {
-                console.error(`Ошибка при выполнении обработчика события '${eventName}': ${error.message}`);
+                console.error(`EventManager: Error when performing an event processor '${eventName}': ${error.message}`);
             }
         };
 
@@ -153,7 +153,7 @@ export default class EventManager {
      * @param {string} eventName - Имя события (без @)
      */
     removeEventHandler(element, eventName) {
-        Logger.debug(`Removing event handler for ${eventName} on`, element);
+        Logger.debug(`EventManager: Removing event handler for ${eventName} on`, element);
         if (this.eventHandlers.has(element)) {
             const elementHandlers = this.eventHandlers.get(element);
 
@@ -174,7 +174,7 @@ export default class EventManager {
      * @param {HTMLElement} element - DOM элемент для обновления
      */
     updateEvents(element) {
-        Logger.debug('Updating events for', element);
+        Logger.debug('EventManager: Updating events for', element);
         Array.from(element.attributes || []).forEach(attr => {
             if (attr.name.startsWith('@')) {
                 const eventName = attr.name.substring(1);
@@ -190,12 +190,16 @@ export default class EventManager {
      * Releases all resources and removes all events
      */
     destroy() {
+        Logger.debug('EventManager: Destroying EventManager');
         this.eventHandlers.forEach((handlers, element) => {
             handlers.forEach((handler, eventName) => {
+                Logger.debug(`EventManager: Removing event handler for ${eventName} on`, element);
                 element.removeEventListener(eventName, handler);
             });
         });
 
         this.eventHandlers.clear();
+        
+        Logger.debug('EventManager: Destroyed');
     }
 }
