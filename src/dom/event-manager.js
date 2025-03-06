@@ -58,7 +58,8 @@ export default class EventManager {
                 const context = {
                     $model: this.model,
                     $event: event,
-                    $data: this.model.data
+                    $data: this.model.data,
+                    $dom: this.domManager,
                 };
 
                 const methodMatch = handlerExpression.match(/(\w+)\((.*)\)/);
@@ -105,6 +106,11 @@ export default class EventManager {
                                 if (param === '$data') {
                                     Logger.debug(`Requested Model Context`, this.model.data);
                                     return this.model.data;
+                                }
+                                
+                                if (param === '$dom') {
+                                    Logger.debug(`Requested DOMManager`, this.domManager);
+                                    return this.domManager;
                                 }
 
                                 return this.model.store.get(param);
