@@ -2,9 +2,9 @@ import Logger from "../logger/logger.js";
 
 export default class EventManager {
     /**
-     * Создает экземпляр менеджера событий
-     * @param {Object} domManager - DOM менеджер для работы с DOM элементами
-     * @param {Object} model - Модель данных, которая будет использоваться как контекст в обработчиках событий
+     * Creates a copy of the event manager
+     * @param {Object} domManager - DOM manager for working with DOM elements
+     * @param {Object} model - Data model that will be used as a context in events
      */
     constructor(domManager, model) {
         Logger.DEBUG_LEVEL = model.options.debug ? 4 : 0;
@@ -18,9 +18,9 @@ export default class EventManager {
     }
 
     /**
-     * Анализирует DOM-дерево и находит все атрибуты, начинающиеся с @,
-     * регистрируя их как обработчики событий
-     * @param {HTMLElement} rootElement - Корневой элемент для поиска событий
+     * Analyzes DOM-Vreyevo and finds all attributes starting with @,
+     * Registering them as events
+     * @param {HTMLElement} rootElement - Root element for searching for events
      */
     parseEvents(rootElement) {
         Logger.debug("EventManager: Parsing events with @...")
@@ -46,9 +46,9 @@ export default class EventManager {
 
     /**
      * Binds the event handler to the DOM element
-     * @param {HTMLElement} element - DOM элемент
-     * @param {string} eventName - Имя события (без @)
-     * @param {string} handlerExpression - Строка с обработчиком события
+     * @param {HTMLElement} element - DOM element
+     * @param {string} eventName - Event name (without @)
+     * @param {string} handlerExpression - Line with an event processor
      */
     bindEventHandler(element, eventName, handlerExpression) {
         Logger.debug(`EventManager: Binding event handler with expression ${handlerExpression} for ${eventName} on`, element);
@@ -149,8 +149,8 @@ export default class EventManager {
 
     /**
      * Removes the event processor from the DOM element
-     * @param {HTMLElement} element - DOM элемент
-     * @param {string} eventName - Имя события (без @)
+     * @param {HTMLElement} element - DOM element
+     * @param {string} eventName - Event name (without @)
      */
     removeEventHandler(element, eventName) {
         Logger.debug(`EventManager: Removing event handler for ${eventName} on`, element);
@@ -171,7 +171,7 @@ export default class EventManager {
 
     /**
      * Updates events for the element
-     * @param {HTMLElement} element - DOM элемент для обновления
+     * @param {HTMLElement} element - DOM element for updating
      */
     updateEvents(element) {
         Logger.debug('EventManager: Updating events for', element);
