@@ -1,7 +1,7 @@
 {
   "author": "Serhii Pimenov <serhii@pimenov.com.ua>",
   "name": "@olton/model",
-  "version": "0.17.0",
+  "version": "0.17.1",
   "description": "Reactive model with two-way data binding",
   "keywords": [
     "javascript",
@@ -21,11 +21,16 @@
   "license": "MIT",
   "main": "dist/model.js",
   "type": "module",
+  "types": "types/model.d.ts",
+  "files": [
+    "dist",
+    "types"
+  ],
   "scripts": {
     "clean": "shx rm -rf lib/*",
     "build": "npm run clean && cross-env NODE_NO_WARNINGS=1 MODE=production node build.js",
     "dev": "npm run clean && cross-env NODE_NO_WARNINGS=1 MODE=development node build.js",
-    "pub": "npm publish --access public",
+    "pub": "npm run build && npm publish --access public",
     "test": "easytest --include='__tests__/*.test.js'",
     "check": "npx biome check",
     "start": "vite"
