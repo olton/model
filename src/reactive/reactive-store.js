@@ -31,24 +31,24 @@ export default class ReactiveStore extends EventEmitter {
      */
     constructor(initialState = {}, model) {
         Logger.DEBUG_LEVEL = model.options.debug ? 4 : 0;
-        Logger.debug("Model: Init ReactiveStore")
+        Logger.debug("Init ReactiveStore")
 
         super();
 
         this.model = model;
         
         Logger.DEBUG_LEVEL = this.model.options.debug ? 4 : 0;
-        Logger.debug('Model: Init ReactiveStore');
+        Logger.debug('Init ReactiveStore');
 
         this.state = this.createReactiveProxy(initialState);
         this.watchers = new Map();
         this.previousState = JSON.parse(JSON.stringify(initialState));
         
-        Logger.debug('Model: Init MiddlewareManager');
+        Logger.debug('Init MiddlewareManager');
         this.middleware = new MiddlewareManager();
-        Logger.debug('Model: MiddlewareManager initialized');
+        Logger.debug('MiddlewareManager initialized');
 
-        Logger.debug('Model: ReactiveStore initialized');
+        Logger.debug('ReactiveStore initialized');
     }
 
     /**
@@ -62,7 +62,7 @@ export default class ReactiveStore extends EventEmitter {
      * @param {Function} middleware - Handler(context, next)
      */
     use(middleware) {
-        Logger.debug('Model: Registering middleware:', middleware);
+        Logger.debug('Registering middleware:', middleware);
         this.middleware.use(middleware);
     }
 
@@ -82,7 +82,7 @@ export default class ReactiveStore extends EventEmitter {
      * @returns {Proxy} Reactive proxy
      */
     createReactiveProxy(obj, path = '') {
-        Logger.debug(`Model: Creating reactive object with path ${path} for`, obj);
+        Logger.debug(`Creating reactive object with path ${path} for`, obj);
 
         if (Array.isArray(obj)) {
             return this.createArrayProxy(obj, path);
@@ -201,7 +201,7 @@ export default class ReactiveStore extends EventEmitter {
      * @returns {Proxy} A proxy that wraps the given array to make it reactive.
      */
     createArrayProxy(array, path) {
-        Logger.debug(`Model: Creating reactive array with path ${path} for`, array);
+        Logger.debug(`Creating reactive array with path ${path} for`, array);
         
         return new Proxy(array, {
             get: (target, prop) => {
@@ -353,7 +353,7 @@ export default class ReactiveStore extends EventEmitter {
      * @returns {any} The result of applying the array method to the array.
      */
     applyArrayMethod(path, method, ...args) {
-        Logger.debug(`Model: Applying array method ${method} to path ${path} with args`, args);
+        Logger.debug(`Applying array method ${method} to path ${path} with args`, args);
         
         const array = this.get(path);
 
@@ -401,7 +401,7 @@ export default class ReactiveStore extends EventEmitter {
      * @returns {any} The result of the callback function applied to the array.
      */
     applyArrayChanges(path, callback) {
-        Logger.debug(`Model: Applying custom array changes to path ${path} with callback`, callback);
+        Logger.debug(`Applying custom array changes to path ${path} with callback`, callback);
         
         const array = this.get(path);
 
@@ -446,7 +446,7 @@ export default class ReactiveStore extends EventEmitter {
      * @returns {Object} An object containing the changes between the arrays.
      */
     detectArrayChanges(newArray, oldArray = []) {
-        Logger.debug(`Model: Detecting changes between arrays`);
+        Logger.debug(`Detecting changes between arrays`);
         
         const changes = {
             added: [],
@@ -478,7 +478,7 @@ export default class ReactiveStore extends EventEmitter {
             }
         }
 
-        Logger.debug(`Model: Detected changes:`, changes);
+        Logger.debug(`Detected changes:`, changes);
         
         return changes;
     }
@@ -494,7 +494,7 @@ export default class ReactiveStore extends EventEmitter {
      * @returns {Function} A function to unsubscribe the callback from the watcher.
      */
     watch(path, callback) {
-        Logger.debug(`Model: Watching path ${path} with callback`, callback);
+        Logger.debug(`Watching path ${path} with callback`, callback);
         
         if (!this.watchers.has(path)) {
             this.watchers.set(path, new Set());
@@ -514,7 +514,7 @@ export default class ReactiveStore extends EventEmitter {
      * @returns {any} - The value at the specified path or `undefined` if the path does not exist.
      */
     get(path) {
-        Logger.debug(`Model: Getting value at path ${path}`);
+        Logger.debug(`Getting value at path ${path}`);
         
         if (!path) return this.state;
 
@@ -537,7 +537,7 @@ export default class ReactiveStore extends EventEmitter {
      * @param {any} value - The new value to set at the specified path.
      */
     set(path, value) {
-        Logger.debug(`Model: Setting value at path ${path} to`, value);
+        Logger.debug(`Setting value at path ${path} to`, value);
         
         const parts = path.split('.');
         let current = this.state;
@@ -567,7 +567,7 @@ export default class ReactiveStore extends EventEmitter {
      *                                    paths (dot-delimited) and values are the new values to set for those paths.
      */
     batch(updater) {
-        Logger.debug(`Model: Batch updating state with`, updater);
+        Logger.debug(`Batch updating state with`, updater);
         
         this.previousState = JSON.parse(JSON.stringify(this.state));
 
@@ -590,7 +590,7 @@ export default class ReactiveStore extends EventEmitter {
      * @returns {Object} The entire state object.
      */
     getState() {
-        Logger.debug(`Model: Getting entire state`);
+        Logger.debug(`Getting entire state`);
         return this.state;
     }
 
@@ -603,7 +603,7 @@ export default class ReactiveStore extends EventEmitter {
      * @returns {Object} The previous state object.
      */
     getPreviousState() {
-        Logger.debug(`Model: Getting previous state`);
+        Logger.debug(`Getting previous state`);
         return this.previousState;
     }
 
@@ -616,7 +616,7 @@ export default class ReactiveStore extends EventEmitter {
      * @returns {string} A JSON string representation of the current state.
      */
     toJSON() {
-        Logger.debug(`Model: Converting state to JSON`);
+        Logger.debug(`Converting state to JSON`);
         return JSON.stringify(this.state);
     }
 
@@ -631,7 +631,7 @@ export default class ReactiveStore extends EventEmitter {
      * @param {string} json - A JSON-formatted string representing the new state.
      */
     fromJSON(json) {
-        Logger.debug(`Model: Restoring state from JSON`, json);
+        Logger.debug(`Restoring state from JSON`, json);
         const newState = JSON.parse(json);
         this.previousState = JSON.parse(JSON.stringify(this.state));
 
@@ -659,7 +659,7 @@ export default class ReactiveStore extends EventEmitter {
      * @param {Function} validator - A function that checks the validity of the property value.
      */
     addValidator(propertyPath, validator) {
-        Logger.debug(`Model: Adding validator for path ${propertyPath}`);
+        Logger.debug(`Adding validator for path ${propertyPath}`);
         if (!this.validators) {
             this.validators = new Map();
         }
@@ -678,7 +678,7 @@ export default class ReactiveStore extends EventEmitter {
      *                                and returns the formatted value.
      */
     addFormatter(propertyPath, formatter) {
-        Logger.debug(`Model: Adding formatter for path ${propertyPath}`);
+        Logger.debug(`Adding formatter for path ${propertyPath}`);
         if (!this.formatters) {
             this.formatters = new Map();
         }
@@ -695,12 +695,12 @@ export default class ReactiveStore extends EventEmitter {
      * @returns {boolean} - `true` if the path exists and has a defined value, `false` otherwise.
      */
     isValidPath(path) {
-        Logger.debug(`Model: Validating path ${path}`);
+        Logger.debug(`Validating path ${path}`);
         try {
             const value = this.get(path);
             return value !== undefined;
         } catch (e) {
-            Logger.error(`Model: Error validating path ${path}:`, e);
+            Logger.error(`Error validating path ${path}:`, e);
             return false;
         }
     }
@@ -716,6 +716,6 @@ export default class ReactiveStore extends EventEmitter {
         this.watchers.clear();
         this.previousState = null;
         
-        Logger.debug('Model: ReactiveStore destroyed');
+        Logger.debug('ReactiveStore destroyed');
     }
 }

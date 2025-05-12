@@ -1,4 +1,5 @@
 import Model from "./core/model.js";
+import ModelPlugin from "./plugin/index.js";
 
 const version = "__VERSION__";
 const build_time = "__BUILD_TIME__";
@@ -8,3 +9,4 @@ Model.info = () => {
 }
 
 export default Model;
+export { ModelPlugin };

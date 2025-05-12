@@ -24,6 +24,8 @@ declare module 'model' {
      * @default false
      */
     debug?: boolean;
+    
+    plugins?: Array<[string, object]>;
   }
 
   /**

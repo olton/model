@@ -1,10 +1,10 @@
-import EventEmitter from '../event-emitter/event-emitter.js';
-import DevTools from "../dev/dev-tools.js";
-import ReactiveStore from "../reactive/reactive-store.js";
-import DOMManager from "../dom/dom-manager.js";
-import ComputedProps from "../reactive/computed.js";
-import StateManager from "../state-manager/state-manager.js";
-import Logger from "../logger/logger.js";
+import EventEmitter from '../event-emitter/event-emitter.js'
+import DevTools from '../dev/dev-tools.js'
+import ReactiveStore from '../reactive/reactive-store.js'
+import DOMManager from '../dom/dom-manager.js'
+import ComputedProps from '../reactive/computed.js'
+import StateManager from '../state-manager/state-manager.js'
+import Logger from '../logger/logger.js'
 
 /**
  * Default options for the Model class.
@@ -14,6 +14,9 @@ const ModelOptions = {
     id: "model", 
     useSimpleExpressions: true,
     debug: false,
+    plugins: [],
+    validators: [],
+    formatters: [],
 }
 
 /**
@@ -22,12 +25,6 @@ const ModelOptions = {
  */
 class Model extends EventEmitter {
     /**
-     * A map for storing registered plugins.
-     * @type {Map<string, Function>}
-     */
-    static plugins = new Map();
-
-    /**
      * Creates a new instance of the Model class.
      * @param {Object} [data={}] - Initial data for the model.
      * @param {Object} [options={}] - Configuration options for the model.
@@ -35,11 +32,11 @@ class Model extends EventEmitter {
     constructor(data = {}, options = {}) {
         super();
 
-        this.options = Object.assign({}, ModelOptions, options);
+        this.options = {...ModelOptions, ...options};
 
         Logger.DEBUG_LEVEL = this.options.debug ? 4 : 0;
-        Logger.debug('Model: Creating a model with data:', data);
-        Logger.debug('Model: Configuration options:', options);
+        Logger.debug('Creating a model with data:', data);
+        Logger.debug('Configuration options:', options);
         
         // this.events = []
         this.computed = {};
@@ -47,7 +44,7 @@ class Model extends EventEmitter {
         // We register the calculated properties
         for (const key in data) {
             if (typeof data[key] === 'function') {
-                Logger.debug(`Model: Registration calculated property "${key}"`);
+                Logger.debug(`Registration calculated property "${key}"`);
                 this.computed[key] = {
                     getter: data[key], 
                     value: null, 
@@ -62,10 +59,38 @@ class Model extends EventEmitter {
         this.dom = new DOMManager(this);
         this.computedProps = new ComputedProps(this, this.computed);
         this.stateManager = new StateManager(this.store);
+        this.plugins = new Map();
 
+        if (this.options.plugins) {
+            for (const p of this.options.plugins) {
+                const {name, plugin, options} = p;
+                if (name && plugin && typeof plugin === 'function') {
+                    this.registerPlugin(name, plugin, options);
+                }
+            }
+        }
+        
+        if (this.options.validators) {
+            for (const p of this.options.validators) {
+                const {path, validator} = p;
+                if (path && validator && typeof validator === 'function') {
+                    this.addValidator(path, validator);
+                }
+            }
+        }
+        
+        if (this.options.formatters) {
+            for (const p of this.options.formatters) {
+                const {path, formatter} = p;
+                if (path && formatter && typeof formatter === 'function') {
+                    this.addValidator(path, formatter);
+                }
+            }
+        }
+        
         this.subscribe();
 
-        Logger.debug('Model: The model was created successfully!');
+        Logger.debug('The model was created successfully!');
     }
 
     /**
@@ -73,7 +98,7 @@ class Model extends EventEmitter {
      * input field updates, and computed properties recalculation.
      */
     subscribe() {
-        Logger.debug('Model: Subscribing to store changes');
+        Logger.debug('Subscribing to store changes');
         
         this.store.on("change", (data) => {
             this.dom.updateDOM(data.path, data.newValue);
@@ -86,7 +111,7 @@ class Model extends EventEmitter {
         this.store.on("arrayChange", (data) => this.emit("arrayChange", data))
         this.store.on("batchComplete", (data) => this.emit("batchComplete", data))
 
-        Logger.debug('Model: Subscribing to state manager events');
+        Logger.debug('Subscribing to state manager events');
         this.stateManager.on("saveState", (data) => this.emit("saveState", data))
         this.stateManager.on("saveStateError", (error) => this.emit("saveStateError", error))
         this.stateManager.on("restoreState", (data) => this.emit("restoreState", data))
@@ -256,7 +281,7 @@ class Model extends EventEmitter {
      * @returns {Model|undefined} - Returns the model instance, or undefined if the root element is not found.
      */
     init(selector) {
-        Logger.debug('Model: Initializing DOM bindings');
+        Logger.debug('Initializing DOM bindings');
         
         let rootElement = typeof selector === 'string' ? document.querySelector(selector) : selector;
 
@@ -264,14 +289,14 @@ class Model extends EventEmitter {
             rootElement = document.body
         }
 
-        Logger.debug(`Model: Model initialized in ${selector ?? 'body'}`);
+        Logger.debug(`Model initialized in ${selector ?? 'body'}`);
 
-        Logger.debug('Model: Binding DOM');
+        Logger.debug('Binding DOM');
         this.dom.bindDOM(rootElement);
 
         this.emit('init');
 
-        Logger.debug('Model: Initialization complete!');
+        Logger.debug('Initialization complete!');
         return this;
     }
 
@@ -310,7 +335,7 @@ class Model extends EventEmitter {
             return this.stateManager.createSnapshot();
         }
 
-        return this.stateManager.restoreSnapshot(s);
+        return this.stateManager.restoreSnapshot(_snapshot);
     }
 
     /**
@@ -329,14 +354,14 @@ class Model extends EventEmitter {
      * Registers a plugin for the model.
      * @param {string} name - Name of the plugin.
      * @param {Function} plugin - Plugin class or constructor function.
+     * @param options
      * @throws {Error} If a plugin with the same name is already registered.
      */
-    static registerPlugin(name, plugin) {
-        if (Model.plugins.has(name)) {
+    registerPlugin(name, plugin, options = {}) {
+        if (this.plugins.has(name)) {
             throw new Error(`Plugin ${name} already registered`);
         }
-        Model.plugins.set(name, plugin);
-        this.emit('pluginRegistered', name);
+        this.plugins.set(name, new plugin(this, options));
     }
 
     /**
@@ -346,11 +371,12 @@ class Model extends EventEmitter {
      * @returns {Model} - Returns the model instance to allow method chaining.
      */
     usePlugin(name, options = {}) {
-        const Plugin = Model.plugins.get(name);
-        if (!Plugin) {
+        const pluginInstance = this.plugins.get(name);
+        if (!pluginInstance) {
             console.error(`Plugin ${name} not found`);
+            return this
         }
-        new Plugin(this, options);
+        pluginInstance.run();
         return this;
     }
 
@@ -358,10 +384,9 @@ class Model extends EventEmitter {
      * Removes a registered plugin by name.
      * @param name
      */
-    static removePlugin(name) {
-        if (Model.plugins.has(name)) {
-            Model.plugins.delete(name);
-            this.emit('pluginUnregistered', name);
+    removePlugin(name) {
+        if (this.plugins.has(name)) {
+            this.plugins.delete(name);
         }
     }
     

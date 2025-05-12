@@ -23,14 +23,14 @@ export default class LoopManager {
      */
     constructor(domManager, model) {
         Logger.DEBUG_LEVEL = model.options.debug ? 4 : 0;
-        Logger.debug('Model: Init LoopManager');
+        Logger.debug('Init LoopManager');
 
         this.domManager = domManager;
         this.model = model;
         this.loops = new Map();
         this.loopsIn = []
         
-        Logger.debug('Model: LoopManager initialized');
+        Logger.debug('LoopManager initialized');
     }
 
     /**
@@ -378,6 +378,6 @@ export default class LoopManager {
         this.loops.clear();
         this.loopsIn = [];
         
-        Logger.debug('Model: LoopManager destroyed');
+        Logger.debug('LoopManager destroyed');
     }
 }

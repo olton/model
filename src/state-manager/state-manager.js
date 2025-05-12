@@ -19,13 +19,13 @@ export default class StateManager extends EventEmitter {
      */
     constructor(store, options = {}) {
         Logger.DEBUG_LEVEL = store.model.options.debug ? 4 : 0;
-        Logger.debug('Model: Init StateManager:', options);
+        Logger.debug('Init StateManager:', options);
 
         super();
         this.store = store;
         this.options = Object.assign({id: "model"}, options);
         
-        Logger.debug('Model: StateManager initialized');
+        Logger.debug('StateManager initialized');
     }
 
     /**
@@ -99,7 +99,9 @@ export default class StateManager extends EventEmitter {
             console.warn('localStorage is not available');
             return null;
         }
+
         const dataToSave = JSON.parse(JSON.stringify(this.store.getState()));
+
         const snapshot = {
             data: dataToSave,
             timestamp: Date.now()
