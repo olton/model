@@ -1,7 +1,7 @@
 {
   "author": "Serhii Pimenov <serhii@pimenov.com.ua>",
   "name": "@olton/model",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "description": "Reactive model with two-way data binding",
   "keywords": [
     "javascript",
