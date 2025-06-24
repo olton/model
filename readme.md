@@ -6,8 +6,6 @@ Model – Is a reactive data model for two-way data binding
 
 </div>
 
-![Alt](https://repobeats.axiom.co/api/embed/f9fb207d1b8878c829433a10ad16e86ca9c59d4e.svg "Repobeats analytics image")
-
 <div align="center">
 
 ![Dependencies](https://img.shields.io/badge/Dependencies-none-darklime.svg)
@@ -22,7 +20,7 @@ Model – Is a reactive data model for two-way data binding
 
 ## Documentation
 
-Read about `Model` usage in the [Metro UI](https://docs-new.metroui.org.ua/libraries/model) documentation.
+Read about `Model` usage in the [Metro UI](https://v5.metroui.org.ua/libraries/model) documentation.
 
 ## License
 
